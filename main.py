@@ -517,7 +517,9 @@ async def websocket_endpoint(websocket: WebSocket):
             pass
     try:
         while True:
-            await websocket.receive_text()
+            text = await websocket.receive_text()
+            if text == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
     except Exception:
@@ -776,10 +778,19 @@ async def test_token_endpoint(body: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.environ.get("PORT", 8070))
     print("\n" + "=" * 55)
     print("  [+] Deriv Rise & Fall 5m Bot")
-    print("  [*] Dashboard: http://localhost:8070")
-    print("  [*] Settings:  http://localhost:8070/settings")
+    print(f"  [*] Dashboard: http://localhost:{port}")
+    print(f"  [*] Settings:  http://localhost:{port}/settings")
     print("=" * 55 + "\n")
-    uvicorn.run("main:app", host="0.0.0.0", port=8070, reload=False)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+        ws="websockets",
+        reload=False,
+    )
 

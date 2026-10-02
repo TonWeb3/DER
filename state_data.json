@@ -1,0 +1,17 @@
+{
+  "active_trades": [],
+  "trade_history": [],
+  "entered_candles": [],
+  "martingale": {
+    "loss_streak": 0,
+    "win_streak": 0,
+    "current_step": 0,
+    "last_result": null
+  },
+  "risk_summary": {
+    "session_profit": 0.0,
+    "total_trades": 0,
+    "total_wins": 0,
+    "total_losses": 0
+  }
+}

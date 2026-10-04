@@ -144,10 +144,11 @@ def can_trade() -> Tuple[bool, str]:
 
 async def seed_candles():
     granularity = settings.TIMEFRAME_MINUTES * 60
-    seeds = await deriv.fetch_seed_candles(count=100, granularity=granularity)
+    fetch_count = max(100, settings.BREAKOUT_CANDLES_COUNT + 15)
+    seeds = await deriv.fetch_seed_candles(count=fetch_count, granularity=granularity)
     if seeds:
         candle_tracker.seed(seeds)
-        log_message(f"Seeded {len(seeds)} historical {settings.TIMEFRAME_MINUTES}m candles for {settings.SYMBOL}")
+        log_message(f"Seeded {len(seeds)} historical {settings.TIMEFRAME_MINUTES}m candles for {settings.SYMBOL} (Breakout Lookback: {settings.BREAKOUT_CANDLES_COUNT}c)")
         return True
     log_message("Seeding candles pending (will retry once connected)")
     return False
@@ -281,8 +282,12 @@ async def _open_trade(direction: str, duration_ticks: int, stake: float, candle_
 
 def build_snapshot(reason: Optional[str] = None) -> Dict[str, Any]:
     spot = deriv.get_last().get("price")
-    timing = candle_tracker.get_timing(trade_window_minutes=settings.TRADE_WINDOW_MINUTES)
-    signal_info = candle_tracker.get_signal(spot)
+    timing = candle_tracker.get_timing(trade_window_seconds=settings.TRADE_WINDOW_SECONDS)
+    signal_info = candle_tracker.get_signal(
+        spot,
+        lookback_candles=settings.BREAKOUT_CANDLES_COUNT,
+        threshold_pct=settings.BREAKOUT_THRESHOLD_PCT,
+    )
     base_stake = _calculate_base_stake()
     actual_stake = None
     if base_stake:
@@ -304,8 +309,11 @@ def build_snapshot(reason: Optional[str] = None) -> Dict[str, Any]:
             "reason": reason or state.get("last_trade_reason", "stopped"),
             "in_trade_window": timing["in_trade_window"],
             "duration_ticks": settings.DURATION_TICKS,
+            "trade_window_seconds": settings.TRADE_WINDOW_SECONDS,
             "trade_window_minutes": settings.TRADE_WINDOW_MINUTES,
             "timeframe_minutes": settings.TIMEFRAME_MINUTES,
+            "breakout_candles_count": settings.BREAKOUT_CANDLES_COUNT,
+            "breakout_threshold_pct": settings.BREAKOUT_THRESHOLD_PCT,
         },
         "martingale": {
             **martingale.get_state(),
@@ -365,8 +373,12 @@ async def update_loop():
                 state["balance_fetched_at"] = time.time()
             state["balance"] = deriv.balance
 
-            timing = candle_tracker.get_timing(trade_window_minutes=settings.TRADE_WINDOW_MINUTES)
-            signal_info = candle_tracker.get_signal(spot)
+            timing = candle_tracker.get_timing(trade_window_seconds=settings.TRADE_WINDOW_SECONDS)
+            signal_info = candle_tracker.get_signal(
+                spot,
+                lookback_candles=settings.BREAKOUT_CANDLES_COUNT,
+                threshold_pct=settings.BREAKOUT_THRESHOLD_PCT,
+            )
             candle_start_ts = timing["candle_start_ts"]
             martingale.check_candle_rollover(candle_start_ts)
 
@@ -392,14 +404,22 @@ async def update_loop():
             elif martingale.candle_paused_max_steps:
                 reason = f"martingale_max_steps_reached (waiting for next {settings.TIMEFRAME_MINUTES}m candle)"
             elif not timing["in_trade_window"]:
-                reason = f"outside_window ({timing['remaining_minutes']:.1f}m left in candle)"
+                if timing["remaining_seconds"] < 60:
+                    reason = f"outside_window ({int(timing['remaining_seconds'])}s left in candle)"
+                else:
+                    reason = f"outside_window ({timing['remaining_minutes']:.1f}m left in candle)"
             else:
                 # Check risk and target profit
                 risk_ok, risk_msg = risk_mgr.can_trade_target_and_risk(balance=state["balance"])
                 if not risk_ok:
                     reason = risk_msg
                 elif not signal_info["ready"]:
-                    reason = f"signal_neutral (spot == open)"
+                    bo = signal_info.get("breakout", {})
+                    pip = deriv.pip_size or 2
+                    if bo.get("in_noise_buffer"):
+                        reason = f"noise_buffer (diff {signal_info['diff']:+.{pip}f} within buffer [-{bo['fall_threshold']:.{pip}f}, +{bo['rise_threshold']:.{pip}f}])"
+                    else:
+                        reason = "signal_neutral (spot == open)"
                 elif actual_stake is None:
                     reason = "no_balance"
                 else:
@@ -526,15 +546,25 @@ async def websocket_endpoint(websocket: WebSocket):
         ws_manager.disconnect(websocket)
 
 
+def render_template(template_name: str, request: Request, context: Optional[Dict[str, Any]] = None):
+    ctx = {"request": request}
+    if context:
+        ctx.update(context)
+    try:
+        return templates.TemplateResponse(request=request, name=template_name, context=ctx)
+    except TypeError:
+        return templates.TemplateResponse(template_name, ctx)
+
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_view(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return render_template("index.html", request)
 
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_view(request: Request):
-    return templates.TemplateResponse("settings.html", {"request": request})
+    return render_template("settings.html", request)
 
 
 @app.get("/api/latest")
@@ -618,7 +648,10 @@ async def fetch_settings():
             "risk_value": settings.RISK_VALUE,
             "timeframe_minutes": settings.TIMEFRAME_MINUTES,
             "duration_ticks": settings.DURATION_TICKS,
+            "trade_window_seconds": settings.TRADE_WINDOW_SECONDS,
             "trade_window_minutes": settings.TRADE_WINDOW_MINUTES,
+            "breakout_candles_count": settings.BREAKOUT_CANDLES_COUNT,
+            "breakout_threshold_pct": settings.BREAKOUT_THRESHOLD_PCT,
         },
         "martingale": {
             "enabled": settings.MARTINGALE_ENABLED,
@@ -664,8 +697,6 @@ async def update_settings(new_config: Dict[str, Any]):
         return base
 
     merged = deep_merge(cfg, new_config)
-    with open("config.json", "w", encoding="utf-8") as f:
-        json.dump(merged, f, indent=2)
 
     # Apply to running instances
     if "mode" in new_config:
@@ -681,9 +712,12 @@ async def update_settings(new_config: Dict[str, Any]):
             settings.DERIV_TOKEN = str(d["token"])
             deriv.token = settings.DERIV_TOKEN
 
+    reseed_needed = False
     if "trading" in new_config:
         t = new_config["trading"]
         if t.get("symbol") in SUPPORTED_SYMBOLS:
+            if settings.SYMBOL != t["symbol"]:
+                reseed_needed = True
             settings.SYMBOL = t["symbol"]
             deriv.symbol = settings.SYMBOL
         if "currency" in t:
@@ -694,12 +728,36 @@ async def update_settings(new_config: Dict[str, Any]):
         if "risk_value" in t:
             settings.RISK_VALUE = float(t["risk_value"])
         if "timeframe_minutes" in t:
-            settings.TIMEFRAME_MINUTES = int(t["timeframe_minutes"])
+            new_tf = int(t["timeframe_minutes"])
+            if settings.TIMEFRAME_MINUTES != new_tf:
+                reseed_needed = True
+            settings.TIMEFRAME_MINUTES = new_tf
             candle_tracker.timeframe_minutes = settings.TIMEFRAME_MINUTES
         if "duration_ticks" in t:
             settings.DURATION_TICKS = max(1, min(10, int(t["duration_ticks"])))
-        if "trade_window_minutes" in t:
+        if "trade_window_seconds" in t:
+            settings.TRADE_WINDOW_SECONDS = float(t["trade_window_seconds"])
+            settings.TRADE_WINDOW_MINUTES = round(settings.TRADE_WINDOW_SECONDS / 60.0, 2)
+        elif "trade_window_minutes" in t:
             settings.TRADE_WINDOW_MINUTES = float(t["trade_window_minutes"])
+            settings.TRADE_WINDOW_SECONDS = float(settings.TRADE_WINDOW_MINUTES * 60.0)
+        if "breakout_candles_count" in t:
+            new_cnt = max(5, min(200, int(t["breakout_candles_count"])))
+            if settings.BREAKOUT_CANDLES_COUNT != new_cnt:
+                reseed_needed = True
+            settings.BREAKOUT_CANDLES_COUNT = new_cnt
+        if "breakout_threshold_pct" in t:
+            settings.BREAKOUT_THRESHOLD_PCT = max(0.0, min(100.0, float(t["breakout_threshold_pct"])))
+
+        # Ensure merged config contains both seconds and minutes and breakout params in sync
+        if "trading" in merged:
+            merged["trading"]["trade_window_seconds"] = settings.TRADE_WINDOW_SECONDS
+            merged["trading"]["trade_window_minutes"] = settings.TRADE_WINDOW_MINUTES
+            merged["trading"]["breakout_candles_count"] = settings.BREAKOUT_CANDLES_COUNT
+            merged["trading"]["breakout_threshold_pct"] = settings.BREAKOUT_THRESHOLD_PCT
+
+    if reseed_needed and deriv.connected:
+        asyncio.create_task(seed_candles())
 
     if "martingale" in new_config:
         m = new_config["martingale"]
@@ -733,6 +791,10 @@ async def update_settings(new_config: Dict[str, Any]):
         if "amount" in sl:
             settings.STOP_LOSS_AMOUNT = float(sl["amount"])
             risk_mgr.stop_loss_amount = settings.STOP_LOSS_AMOUNT
+
+    # Save merged config to file after syncing all sections
+    with open("config.json", "w", encoding="utf-8") as f:
+        json.dump(merged, f, indent=2)
 
     state["latest_data"] = build_snapshot()
     log_message("Settings updated and applied dynamically")

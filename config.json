@@ -11,7 +11,10 @@
     "risk_value": 2,
     "timeframe_minutes": 5,
     "duration_ticks": 5,
-    "trade_window_minutes": 3
+    "trade_window_seconds": 180.0,
+    "trade_window_minutes": 3.0,
+    "breakout_candles_count": 50,
+    "breakout_threshold_pct": 10.0
   },
   "martingale": {
     "enabled": true,
@@ -20,7 +23,7 @@
   },
   "target_profit": {
     "enabled": true,
-    "scope": "5m_window",
+    "scope": "candle_window",
     "amount": 10
   },
   "stop_loss": {

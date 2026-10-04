@@ -30,10 +30,15 @@ class Settings(BaseSettings):
     SYMBOL: str = "R_100"
     CURRENCY: str = "USD"
 
-    # 5-minute candle strategy parameters
+    # Candle strategy parameters
     TIMEFRAME_MINUTES: int = 5
     DURATION_TICKS: int = 5
-    TRADE_WINDOW_MINUTES: float = 3.0  # Only trade within first 3 minutes of 5m candle
+    TRADE_WINDOW_SECONDS: float = 180.0  # Allowed trade window in seconds (e.g. 180s for 3m, 45s for 1m candle)
+    TRADE_WINDOW_MINUTES: float = 3.0    # Maintained for minutes display
+
+    # Breakout & Noise Filter parameters
+    BREAKOUT_CANDLES_COUNT: int = 50     # Number of past completed candles to sample for avg move
+    BREAKOUT_THRESHOLD_PCT: float = 10.0 # Price must move >= this % of avg move beyond open to trigger entry
 
     # Base stake & risk
     RISK_TYPE: str = "fixed"  # "fixed" or "percent"
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
 
     # Target Profit (strictly follows RISK_TYPE: fixed $ or % of balance)
     TARGET_PROFIT_ENABLED: bool = False
-    TARGET_PROFIT_SCOPE: str = "5m_window"  # "5m_window" or "session"
+    TARGET_PROFIT_SCOPE: str = "candle_window"  # "candle_window" (or legacy "5m_window") or "session"
     TARGET_PROFIT_AMOUNT: float = 5.0
 
     # Stop Loss
@@ -86,8 +91,16 @@ def load_settings() -> Settings:
                     base.TIMEFRAME_MINUTES = int(t["timeframe_minutes"])
                 if "duration_ticks" in t:
                     base.DURATION_TICKS = max(1, min(10, int(t["duration_ticks"])))
-                if "trade_window_minutes" in t:
+                if "trade_window_seconds" in t:
+                    base.TRADE_WINDOW_SECONDS = float(t["trade_window_seconds"])
+                    base.TRADE_WINDOW_MINUTES = round(base.TRADE_WINDOW_SECONDS / 60.0, 2)
+                elif "trade_window_minutes" in t:
                     base.TRADE_WINDOW_MINUTES = float(t["trade_window_minutes"])
+                    base.TRADE_WINDOW_SECONDS = float(base.TRADE_WINDOW_MINUTES * 60.0)
+                if "breakout_candles_count" in t:
+                    base.BREAKOUT_CANDLES_COUNT = max(5, min(200, int(t["breakout_candles_count"])))
+                if "breakout_threshold_pct" in t:
+                    base.BREAKOUT_THRESHOLD_PCT = max(0.0, min(100.0, float(t["breakout_threshold_pct"])))
 
             if "martingale" in data:
                 m = data["martingale"]

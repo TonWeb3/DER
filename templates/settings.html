@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Settings • Deriv Rise & Fall Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -15,33 +15,33 @@
         .font-mono { font-family: 'JetBrains Mono', monospace; }
     </style>
 </head>
-<body class="bg-[#06171d] text-slate-100 min-h-screen p-4 sm:p-8" x-data="settingsApp()" x-cloak>
-  <div class="max-w-4xl mx-auto space-y-6">
+<body class="bg-[#06171d] text-slate-100 min-h-screen p-2.5 sm:p-4 md:p-8" x-data="settingsApp()" x-cloak>
+  <div class="max-w-4xl mx-auto space-y-4 sm:space-y-6">
 
     <!-- Top Header -->
-    <header class="flex justify-between items-center bg-[#0c2a33] p-4 rounded-xl border border-[#1a4d5a] shadow">
-      <div class="flex items-center gap-3">
-        <a href="/" class="p-2 rounded-lg bg-[#082027] hover:bg-[#12414d] text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-bold uppercase">
-          ← Back to Dashboard
+    <header class="flex justify-between items-center bg-[#0c2a33] p-3 sm:p-4 rounded-xl border border-[#1a4d5a] shadow gap-2">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <a href="/" class="p-2 rounded-lg bg-[#082027] hover:bg-[#12414d] text-slate-300 hover:text-white transition flex items-center gap-1 text-[11px] sm:text-xs font-bold uppercase flex-shrink-0">
+          ← <span class="hidden sm:inline">Back to Dashboard</span><span class="sm:hidden">Back</span>
         </a>
-        <h1 class="text-xl font-bold text-white">Bot Configuration</h1>
+        <h1 class="text-sm sm:text-xl font-bold text-white leading-tight">Bot Configuration</h1>
       </div>
       <button @click="saveSettings()" :disabled="saving"
-              class="px-5 py-2 rounded-lg font-bold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow disabled:opacity-50">
+              class="px-3.5 sm:px-5 py-2 rounded-lg font-bold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow disabled:opacity-50 flex-shrink-0">
         <span x-text="saving ? 'Saving...' : 'Save Settings'"></span>
       </button>
     </header>
 
     <!-- Save Alert Banner -->
     <div x-show="saveSuccess" x-transition
-         class="p-4 rounded-xl bg-emerald-950/60 border border-emerald-600 text-emerald-200 text-xs font-semibold flex items-center justify-between shadow">
+         class="p-3 sm:p-4 rounded-xl bg-emerald-950/60 border border-emerald-600 text-emerald-200 text-xs font-semibold flex items-center justify-between shadow">
       <span>✓ Settings successfully saved and applied to live bot!</span>
       <button @click="saveSuccess = false" class="text-emerald-400 hover:text-white">✕</button>
     </div>
 
     <!-- Section 1: Deriv API Connection -->
-    <div class="bg-[#0c2a33] p-6 rounded-xl border border-[#1a4d5a] shadow space-y-4">
-      <h2 class="text-base font-bold uppercase tracking-wider text-cyan-400 border-b border-[#16434f] pb-2 flex items-center gap-2">
+    <div class="bg-[#0c2a33] p-3.5 sm:p-6 rounded-xl border border-[#1a4d5a] shadow space-y-3 sm:space-y-4">
+      <h2 class="text-sm sm:text-base font-bold uppercase tracking-wider text-cyan-400 border-b border-[#16434f] pb-2 flex items-center gap-2">
         <span>1. Deriv API Connection</span>
       </h2>
 
@@ -85,7 +85,7 @@
     <!-- Section 2: Strategy & Execution Timing -->
     <div class="bg-[#0c2a33] p-6 rounded-xl border border-[#1a4d5a] shadow space-y-4">
       <h2 class="text-base font-bold uppercase tracking-wider text-cyan-400 border-b border-[#16434f] pb-2">
-        2. Market, Timeframe & 3m Window
+        2. Market, Timeframe & Trade Window
       </h2>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -101,11 +101,10 @@
 
         <div>
           <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Candle Timeframe</label>
-          <select x-model.number="form.trading.timeframe_minutes" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <option :value="5">5 Minutes (Default)</option>
-            <option :value="15">15 Minutes</option>
-            <option :value="3">3 Minutes</option>
-            <option :value="1">1 Minute</option>
+          <select x-model.number="form.trading.timeframe_minutes" @change="onTimeframeChange()" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
+            <template x-for="tf in supportedTimeframes" :key="tf">
+              <option :value="tf" x-text="tf === 1 ? '1 Minute' : (tf + ' Minutes' + (tf === 5 ? ' (Default)' : ''))"></option>
+            </template>
           </select>
           <p class="text-[11px] text-slate-500 mt-1 italic">Defines the open price reference candle.</p>
         </div>
@@ -118,10 +117,33 @@
         </div>
 
         <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Allowed Trade Window (Minutes)</label>
-          <input type="number" step="0.5" min="0.5" max="5.0" x-model.number="form.trading.trade_window_minutes"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Trades only permitted within first N minutes of 5m candle (default 3.0 min).</p>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-slate-400 text-xs font-semibold uppercase">Allowed Trade Window</label>
+            <span class="text-xs font-mono text-cyan-400 font-bold" x-text="formatWindowDisplay()"></span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <div class="relative">
+                <input type="number" step="5" min="5" :max="(form.trading?.timeframe_minutes || 5) * 60"
+                       x-model.number="form.trading.trade_window_seconds"
+                       @input="onSecondsInput()"
+                       class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 pr-9 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
+                <span class="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono">sec</span>
+              </div>
+            </div>
+            <div>
+              <div class="relative">
+                <input type="number" step="0.25" min="0.1" :max="form.trading?.timeframe_minutes || 5"
+                       x-model.number="form.trading.trade_window_minutes"
+                       @input="onMinutesInput()"
+                       class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 pr-9 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
+                <span class="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono">min</span>
+              </div>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1 italic">
+            Entries allowed in first <span class="text-slate-300 font-mono" x-text="formatWindowDisplay()"></span> of each <span class="text-slate-300 font-mono" x-text="(form.trading?.timeframe_minutes || 5) + 'm'"></span> candle.
+          </p>
         </div>
 
 
@@ -145,6 +167,28 @@
             <span x-show="form.trading.risk_type !== 'percent'">Fixed dollar stake for trade 1 (min $0.35).</span>
           </p>
         </div>
+
+        <div>
+          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Breakout Lookback (Candles)</label>
+          <input type="number" min="5" max="200" step="5" x-model.number="form.trading.breakout_candles_count"
+                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
+          <p class="text-[11px] text-slate-500 mt-1 italic">Past completed candles sampled for avg move from open (default 50).</p>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-slate-400 text-xs font-semibold uppercase">Breakout Noise Filter (%)</label>
+            <span class="text-xs font-mono text-cyan-400 font-bold" x-text="(form.trading.breakout_threshold_pct != null ? form.trading.breakout_threshold_pct : 10) + '% of Avg'"></span>
+          </div>
+          <input type="number" min="0" max="100" step="1" x-model.number="form.trading.breakout_threshold_pct"
+                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
+          <p class="text-[11px] text-slate-500 mt-1 italic">Required move beyond open to enter (above for rise, below for fall).</p>
+        </div>
+      </div>
+
+      <div class="p-3 bg-[#082027] rounded-lg border border-[#16434f] text-[11px] text-slate-400 flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-2">
+        <span class="text-cyan-400 font-bold uppercase tracking-wider text-[10px] sm:text-xs flex-shrink-0">Breakout Noise Filter:</span>
+        <span>Calculates average high (rise) and low (fall) relative to open across the past <b class="text-white font-mono" x-text="form.trading.breakout_candles_count || 50">50</b> candles. Entry only triggers when spot moves past <b class="text-emerald-400 font-mono" x-text="(form.trading.breakout_threshold_pct || 10) + '%'">10%</b> of this historical average, preventing random entries on market noise.</span>
       </div>
     </div>
 
@@ -195,10 +239,14 @@
         <div>
           <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Target Scope</label>
           <select x-model="form.target_profit.scope" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <option value="5m_window">5-Minute Window (Resets each candle)</option>
+            <option value="candle_window" x-text="(form.trading?.timeframe_minutes || 5) + '-Minute Candle Window (Resets each candle)'"></option>
             <option value="session">General / Session (Halts bot completely)</option>
           </select>
-          <p class="text-[11px] text-slate-500 mt-1 italic">Window pauses 5m candle; Session stops bot.</p>
+          <p class="text-[11px] text-slate-500 mt-1 italic">
+            <span x-show="form.target_profit.scope === 'candle_window' || form.target_profit.scope === '5m_window'"
+                  x-text="'Reaching TP/SL pauses bot until the next ' + (form.trading?.timeframe_minutes || 5) + 'm candle.'"></span>
+            <span x-show="form.target_profit.scope === 'session'">Reaching TP/SL stops the bot entirely until manually resumed.</span>
+          </p>
         </div>
 
         <div>
@@ -250,20 +298,58 @@
             symbol: 'R_100',
             timeframe_minutes: 5,
             duration_ticks: 5,
+            trade_window_seconds: 180,
             trade_window_minutes: 3.0,
+            breakout_candles_count: 50,
+            breakout_threshold_pct: 10.0,
             risk_type: 'fixed',
             risk_value: 1.0,
           },
           martingale: { enabled: false, multiplier: 2.0, max_steps: 5 },
-          target_profit: { enabled: false, scope: '5m_window', amount: 5.0 },
+          target_profit: { enabled: false, scope: 'candle_window', amount: 5.0 },
           stop_loss: { enabled: false, amount: 20.0 }
         },
         supportedSymbols: [],
+        supportedTimeframes: [1, 2, 3, 5, 10, 15],
         saving: false,
         saveSuccess: false,
         testing: false,
         testResult: '',
         testOk: false,
+
+        formatWindowDisplay() {
+          const s = Math.round(Number(this.form.trading?.trade_window_seconds || 180));
+          if (s <= 0) return '0m';
+          if (s % 60 === 0) return (s / 60) + 'm';
+          const m = (s / 60).toFixed(2).replace(/\.?0+$/, '');
+          return `${m}m (${s}s)`;
+        },
+
+        onSecondsInput() {
+          let s = Number(this.form.trading.trade_window_seconds);
+          if (isNaN(s) || s < 1) s = 5;
+          const maxSec = (this.form.trading.timeframe_minutes || 5) * 60;
+          if (s > maxSec) s = maxSec;
+          this.form.trading.trade_window_seconds = s;
+          this.form.trading.trade_window_minutes = Math.round((s / 60) * 100) / 100;
+        },
+
+        onMinutesInput() {
+          let m = Number(this.form.trading.trade_window_minutes);
+          if (isNaN(m) || m < 0.05) m = 0.1;
+          const maxMin = this.form.trading.timeframe_minutes || 5;
+          if (m > maxMin) m = maxMin;
+          this.form.trading.trade_window_minutes = m;
+          this.form.trading.trade_window_seconds = Math.round(m * 60);
+        },
+
+        onTimeframeChange() {
+          const maxSec = (this.form.trading.timeframe_minutes || 5) * 60;
+          if (!this.form.trading.trade_window_seconds || this.form.trading.trade_window_seconds > maxSec) {
+            this.form.trading.trade_window_seconds = (maxSec === 60) ? 45 : Math.round(maxSec * 0.6);
+            this.form.trading.trade_window_minutes = Math.round((this.form.trading.trade_window_seconds / 60) * 100) / 100;
+          }
+        },
 
         targetProfitUnit() {
           return (this.form.trading?.risk_type === 'percent') ? '%' : '$';
@@ -292,6 +378,13 @@
               const data = await res.json();
               this.form = Object.assign(this.form, data);
               this.supportedSymbols = data.supported_symbols || ['R_100', 'R_75', 'R_50', 'R_25', 'R_10'];
+              this.supportedTimeframes = data.supported_timeframes || [1, 2, 3, 5, 10, 15];
+              if (!this.form.trading.trade_window_seconds) {
+                this.form.trading.trade_window_seconds = Math.round((this.form.trading.trade_window_minutes || 3.0) * 60);
+              }
+              if (!this.form.trading.trade_window_minutes) {
+                this.form.trading.trade_window_minutes = Math.round((this.form.trading.trade_window_seconds / 60) * 100) / 100;
+              }
             }
           } catch (e) {
             console.error("Failed to load settings:", e);
@@ -302,6 +395,10 @@
           this.saving = true;
           this.saveSuccess = false;
           try {
+            this.form.trading.trade_window_seconds = Number(this.form.trading.trade_window_seconds);
+            this.form.trading.trade_window_minutes = Math.round((this.form.trading.trade_window_seconds / 60) * 100) / 100;
+            this.form.trading.breakout_candles_count = Math.max(5, Math.min(200, parseInt(this.form.trading.breakout_candles_count) || 50));
+            this.form.trading.breakout_threshold_pct = Math.max(0, Math.min(100, parseFloat(this.form.trading.breakout_threshold_pct) || 0));
             const res = await fetch('/api/settings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

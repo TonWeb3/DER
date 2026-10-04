@@ -80,19 +80,31 @@ class CandleTracker:
             self.candles.pop(0)
         return True
 
-    def get_timing(self, trade_window_minutes: float = 3.0) -> Dict[str, Any]:
+    def get_timing(self, trade_window_seconds: Optional[float] = None,
+                   trade_window_minutes: Optional[float] = None) -> Dict[str, Any]:
         """Compute candle timing, elapsed and remaining time, and trade window status."""
-        span_sec = self.timeframe_minutes * 60
+        span_sec = float(self.timeframe_minutes * 60)
         now_sec = time.time()
-        bucket_sec = (int(now_sec) // span_sec) * span_sec
-        candle_end_sec = bucket_sec + span_sec
+        bucket_sec = (int(now_sec) // int(span_sec)) * int(span_sec) if span_sec > 0 else int(now_sec)
+        candle_end_sec = bucket_sec + int(span_sec)
 
         elapsed_sec = max(0.0, now_sec - bucket_sec)
         remaining_sec = max(0.0, candle_end_sec - now_sec)
 
-        allowed_window_sec = trade_window_minutes * 60.0
+        # Resolve trade window in seconds
+        if trade_window_seconds is not None:
+            win_sec = float(trade_window_seconds)
+        elif trade_window_minutes is not None:
+            win_sec = float(trade_window_minutes) * 60.0
+        else:
+            win_sec = 180.0
+
+        # Cap trade window to the candle duration (e.g. max 60s for a 1m candle)
+        allowed_window_sec = min(win_sec, span_sec) if span_sec > 0 else win_sec
         in_trade_window = elapsed_sec <= allowed_window_sec
         window_remaining_sec = max(0.0, allowed_window_sec - elapsed_sec) if in_trade_window else 0.0
+
+        trade_window_min = round(allowed_window_sec / 60.0, 2)
 
         return {
             "candle_start_ts": bucket_sec,
@@ -102,60 +114,150 @@ class CandleTracker:
             "elapsed_minutes": elapsed_sec / 60.0,
             "remaining_minutes": remaining_sec / 60.0,
             "timeframe_minutes": self.timeframe_minutes,
-            "trade_window_minutes": trade_window_minutes,
+            "trade_window_seconds": allowed_window_sec,
+            "trade_window_minutes": trade_window_min,
             "in_trade_window": in_trade_window,
             "window_remaining_seconds": window_remaining_sec,
-            "progress_pct": min(100.0, (elapsed_sec / span_sec) * 100.0),
-            "window_limit_pct": min(100.0, (allowed_window_sec / span_sec) * 100.0),
+            "progress_pct": min(100.0, (elapsed_sec / span_sec) * 100.0) if span_sec > 0 else 0.0,
+            "window_limit_pct": min(100.0, (allowed_window_sec / span_sec) * 100.0) if span_sec > 0 else 0.0,
         }
 
-    def get_signal(self, current_spot: Optional[float]) -> Dict[str, Any]:
-        """Compute Rise/Fall signal based on current spot vs current candle open."""
-        if current_spot is None or self.current_candle is None:
+    def calculate_breakout_stats(self, lookback_candles: int = 50) -> Dict[str, Any]:
+        """Compute the average high expansion and low expansion relative to the open price
+        across the past N completed candles.
+
+        high_delta = high - open (upward move from open)
+        low_delta = open - low   (downward move from open)
+        """
+        closed_candles: List[Dict[str, Any]] = []
+        if self.candles:
+            if self.current_candle and self.candles[-1].get("openTime") == self.current_candle.get("openTime"):
+                closed_candles = self.candles[:-1]
+            else:
+                closed_candles = list(self.candles)
+
+        recent = closed_candles[-lookback_candles:] if closed_candles else []
+        if not recent:
             return {
-                "ready": False,
-                "direction": None,
-                "label": "WAITING",
-                "diff": 0.0,
-                "diff_pct": 0.0,
-                "open_price": None,
-                "spot": current_spot,
+                "avg_high_delta": 0.0,
+                "avg_low_delta": 0.0,
+                "avg_move": 0.0,
+                "candles_count": 0,
             }
+
+        high_deltas = [max(0.0, float(c.get("high", 0.0)) - float(c.get("open", 0.0))) for c in recent]
+        low_deltas = [max(0.0, float(c.get("open", 0.0)) - float(c.get("low", 0.0))) for c in recent]
+
+        avg_high = (sum(high_deltas) / len(high_deltas)) if high_deltas else 0.0
+        avg_low = (sum(low_deltas) / len(low_deltas)) if low_deltas else 0.0
+        avg_move = (avg_high + avg_low) / 2.0
+
+        return {
+            "avg_high_delta": avg_high,
+            "avg_low_delta": avg_low,
+            "avg_move": avg_move,
+            "candles_count": len(recent),
+        }
+
+    def get_signal(self, current_spot: Optional[float],
+                   lookback_candles: int = 50,
+                   threshold_pct: float = 10.0) -> Dict[str, Any]:
+        """Compute Rise/Fall signal based on current spot vs current candle open,
+        refined by historical breakout average over past N candles.
+
+        Rise requires: spot - open >= rise_threshold
+        Fall requires: open - spot >= fall_threshold
+        Where:
+        rise_threshold = avg_high_delta * (threshold_pct / 100.0)
+        fall_threshold = avg_low_delta * (threshold_pct / 100.0)
+        """
+        stats = self.calculate_breakout_stats(lookback_candles=lookback_candles)
+        avg_high = stats["avg_high_delta"]
+        avg_low = stats["avg_low_delta"]
+        avg_move = stats["avg_move"]
+        candles_analyzed = stats["candles_count"]
+
+        pct_factor = max(0.0, threshold_pct) / 100.0
+        rise_threshold = round((avg_high if avg_high > 0 else avg_move) * pct_factor, 5)
+        fall_threshold = round((avg_low if avg_low > 0 else avg_move) * pct_factor, 5)
+
+        base_res = {
+            "ready": False,
+            "direction": None,
+            "label": "WAITING",
+            "diff": 0.0,
+            "diff_pct": 0.0,
+            "open_price": None,
+            "spot": current_spot,
+            "candle": dict(self.current_candle) if self.current_candle else None,
+            "breakout": {
+                "enabled": threshold_pct > 0,
+                "lookback_candles": lookback_candles,
+                "threshold_pct": threshold_pct,
+                "avg_high_delta": avg_high,
+                "avg_low_delta": avg_low,
+                "avg_move": avg_move,
+                "rise_threshold": rise_threshold,
+                "fall_threshold": fall_threshold,
+                "candles_analyzed": candles_analyzed,
+                "in_breakout": False,
+                "in_noise_buffer": False,
+            }
+        }
+
+        if current_spot is None or self.current_candle is None:
+            return base_res
 
         open_p = self.current_candle.get("open")
         if open_p is None:
-            return {
-                "ready": False,
-                "direction": None,
-                "label": "WAITING",
-                "diff": 0.0,
-                "diff_pct": 0.0,
-                "open_price": None,
-                "spot": current_spot,
-            }
+            return base_res
 
         diff = current_spot - open_p
         diff_pct = (diff / open_p * 100.0) if open_p else 0.0
 
-        if diff > 1e-9:
+        direction = None
+        label = "NEUTRAL"
+        in_breakout = False
+        in_noise_buffer = False
+
+        if diff >= rise_threshold and (rise_threshold > 0 or diff > 1e-9):
             direction = "CALL"
             label = "RISE"
-        elif diff < -1e-9:
+            in_breakout = True
+        elif diff <= -fall_threshold and (fall_threshold > 0 or diff < -1e-9):
             direction = "PUT"
             label = "FALL"
+            in_breakout = True
         else:
             direction = None
-            label = "NEUTRAL"
+            if rise_threshold > 0 or fall_threshold > 0:
+                label = "NOISE"
+                in_noise_buffer = True
+            else:
+                label = "NEUTRAL"
 
         return {
             "ready": direction is not None,
-            "direction": direction,  # "CALL" or "PUT"
-            "label": label,          # "RISE", "FALL", "NEUTRAL"
+            "direction": direction,  # "CALL" or "PUT" or None
+            "label": label,          # "RISE", "FALL", "NOISE", "NEUTRAL"
             "diff": diff,
             "diff_pct": diff_pct,
             "open_price": open_p,
             "spot": current_spot,
             "candle": dict(self.current_candle),
+            "breakout": {
+                "enabled": threshold_pct > 0,
+                "lookback_candles": lookback_candles,
+                "threshold_pct": threshold_pct,
+                "avg_high_delta": avg_high,
+                "avg_low_delta": avg_low,
+                "avg_move": avg_move,
+                "rise_threshold": rise_threshold,
+                "fall_threshold": fall_threshold,
+                "candles_analyzed": candles_analyzed,
+                "in_breakout": in_breakout,
+                "in_noise_buffer": in_noise_buffer,
+            }
         }
 
 
@@ -251,13 +353,13 @@ class MartingaleManager:
 
 class ProfitAndRiskManager:
     def __init__(self, target_profit_enabled: bool = False,
-                 target_profit_scope: str = "5m_window",
+                 target_profit_scope: str = "candle_window",
                  target_profit_amount: float = 5.0,
                  risk_type: str = "fixed",
                  stop_loss_enabled: bool = False,
                  stop_loss_amount: float = 20.0):
         self.target_profit_enabled = target_profit_enabled
-        self.target_profit_scope = target_profit_scope  # "5m_window" or "session"
+        self.target_profit_scope = target_profit_scope  # "candle_window" (or legacy "5m_window") vs "session"
         self.target_profit_amount = target_profit_amount
         self.risk_type = risk_type                      # "fixed" or "percent"
         self.stop_loss_enabled = stop_loss_enabled
@@ -269,6 +371,10 @@ class ProfitAndRiskManager:
         self.total_trades = 0
         self.total_wins = 0
         self.total_losses = 0
+
+    def is_candle_scope(self) -> bool:
+        """Determines if target profit or stop loss resets per candle (candle_window or legacy 5m_window)."""
+        return str(self.target_profit_scope).lower() in ("candle_window", "5m_window", "candle")
 
     def is_target_percent(self) -> bool:
         """Determines if target profit is percentage-based: strictly follows risk_type."""
@@ -289,7 +395,7 @@ class ProfitAndRiskManager:
         return round(float(self.stop_loss_amount), 2)
 
     def on_candle_rolled(self):
-        """Called when a new 5-minute candle starts."""
+        """Called when a new candle starts; resets the candle profit and trade count."""
         self.candle_profit = 0.0
         self.candle_trades_count = 0
 
@@ -314,7 +420,7 @@ class ProfitAndRiskManager:
             stop_dollar = self.calculate_stop_loss_dollar(balance)
             stop_desc = f"{self.stop_loss_amount}% (${stop_dollar:.2f})" if is_pct else f"${stop_dollar:.2f}"
             if stop_dollar > 0:
-                if self.target_profit_scope == "5m_window":
+                if self.is_candle_scope():
                     if self.candle_profit <= -stop_dollar:
                         return False, f"candle_stop_loss_reached (-${abs(self.candle_profit):.2f} <= -{stop_desc})"
                 else:  # "session"
@@ -326,7 +432,7 @@ class ProfitAndRiskManager:
             target_dollar = self.calculate_target_dollar(balance)
             target_desc = f"{self.target_profit_amount}% (${target_dollar:.2f})" if is_pct else f"${target_dollar:.2f}"
             if target_dollar > 0:
-                if self.target_profit_scope == "5m_window":
+                if self.is_candle_scope():
                     if self.candle_profit >= target_dollar:
                         return False, f"candle_target_reached (+${self.candle_profit:.2f} >= {target_desc})"
                 else:  # "session"
@@ -354,6 +460,7 @@ class ProfitAndRiskManager:
             "risk_type": self.risk_type,
             "target_profit_enabled": self.target_profit_enabled,
             "target_profit_scope": self.target_profit_scope,
+            "is_candle_scope": self.is_candle_scope(),
             "target_profit_is_percent": is_pct,
             "target_profit_amount": self.target_profit_amount,
             "target_profit_dollar": target_dollar,

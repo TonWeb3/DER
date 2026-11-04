@@ -2,455 +2,339 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Settings • Deriv Rise & Fall Bot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Settings — Spikebot 3.00 Multipliers</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        [x-cloak] { display: none !important; }
-        body { font-family: 'Outfit', sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-    </style>
+    <style>[x-cloak]{display:none!important;}</style>
 </head>
-<body class="bg-[#06171d] text-slate-100 min-h-screen p-2.5 sm:p-4 md:p-8" x-data="settingsApp()" x-cloak>
-  <div class="max-w-4xl mx-auto space-y-4 sm:space-y-6">
-
-    <!-- Top Header -->
-    <header class="flex justify-between items-center bg-[#0c2a33] p-3 sm:p-4 rounded-xl border border-[#1a4d5a] shadow gap-2">
-      <div class="flex items-center gap-2 sm:gap-3">
-        <a href="/" class="p-2 rounded-lg bg-[#082027] hover:bg-[#12414d] text-slate-300 hover:text-white transition flex items-center gap-1 text-[11px] sm:text-xs font-bold uppercase flex-shrink-0">
-          ← <span class="hidden sm:inline">Back to Dashboard</span><span class="sm:hidden">Back</span>
-        </a>
-        <h1 class="text-sm sm:text-xl font-bold text-white leading-tight">Bot Configuration</h1>
+<body class="bg-[#051319] text-slate-100 min-h-screen p-4 sm:p-8" x-data="settingsPage()" x-cloak>
+  <div class="max-w-4xl mx-auto space-y-6">
+    
+    <header class="flex justify-between items-center gap-4 bg-[#09222c] p-4 rounded-xl border border-[#133c4a]">
+      <div>
+        <h1 class="text-2xl font-black text-white flex items-center gap-2">
+          ⚙️ Settings
+          <span class="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded">Spikebot 3.00</span>
+        </h1>
+        <p class="text-xs text-slate-400 mt-0.5">Market Structure Atlas · Multiplier Leverage · Risk &amp; Deriv API</p>
       </div>
-      <button @click="saveSettings()" :disabled="saving"
-              class="px-3.5 sm:px-5 py-2 rounded-lg font-bold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow disabled:opacity-50 flex-shrink-0">
-        <span x-text="saving ? 'Saving...' : 'Save Settings'"></span>
-      </button>
+      <a href="/" class="bg-[#103442] hover:bg-[#194b5e] border border-[#1d4c5e] px-5 py-2 rounded-lg font-bold text-xs text-white transition">
+        &larr; Back to Dashboard
+      </a>
     </header>
 
-    <!-- Save Alert Banner -->
-    <div x-show="saveSuccess" x-transition
-         class="p-3 sm:p-4 rounded-xl bg-emerald-950/60 border border-emerald-600 text-emerald-200 text-xs font-semibold flex items-center justify-between shadow">
-      <span>✓ Settings successfully saved and applied to live bot!</span>
-      <button @click="saveSuccess = false" class="text-emerald-400 hover:text-white">✕</button>
-    </div>
+    <form @submit.prevent="save" class="space-y-6">
 
-    <!-- Section 1: Deriv API Connection -->
-    <div class="bg-[#0c2a33] p-3.5 sm:p-6 rounded-xl border border-[#1a4d5a] shadow space-y-3 sm:space-y-4">
-      <h2 class="text-sm sm:text-base font-bold uppercase tracking-wider text-cyan-400 border-b border-[#16434f] pb-2 flex items-center gap-2">
-        <span>1. Deriv API Connection</span>
-      </h2>
+      <!-- Multiplier Leverage Selection (100x, 200x, 300x, 400x, 500x) -->
+      <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
+        <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+          <span>⚡</span>
+          <span>Multiplier Leverage</span>
+        </h2>
+        <p class="text-xs text-slate-400 mb-4">
+          Select multiplier factor for Deriv positions. Higher multiplier magnifies profit when a spike occurs.
+        </p>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Account Mode</label>
-          <select x-model="form.mode" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <option value="demo">Demo (Virtual Account)</option>
-            <option value="live">Live (Real Money Account)</option>
-          </select>
-          <p class="text-[11px] text-slate-500 mt-1 italic">Demo automatically binds to your virtual token; Live uses real funds.</p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Deriv App ID</label>
-          <input type="text" x-model="form.deriv.app_id" placeholder="e.g. 33LuGFJlOlfbqzHVZLFCi"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Native App ID from developers.deriv.com.</p>
-        </div>
-
-        <div class="md:col-span-2">
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Personal Access Token (PAT)</label>
-          <input type="password" x-model="form.deriv.token" placeholder="pat_... (Read + Trade scopes required)"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Keep masked or paste a new token. Needs Read + Trade permissions.</p>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <template x-for="m in supportedMultipliers" :key="m">
+            <button type="button" @click="form.trading.multiplier = m"
+                    class="p-4 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1"
+                    :class="form.trading.multiplier === m ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-2 ring-amber-400/50 shadow-lg' : 'bg-[#0d2a37] border-[#184657] text-slate-300 hover:border-slate-500'">
+              <span class="text-2xl font-black font-mono" x-text="m+'x'"></span>
+              <span class="text-[10px] uppercase font-bold"
+                    x-text="m===100?'Base':(m===200?'Standard':(m===300?'High':(m===400?'Very High':'Maximum')))"></span>
+            </button>
+          </template>
         </div>
       </div>
 
-      <!-- Test Connection Button -->
-      <div class="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <button type="button" @click="testConnection()" :disabled="testing"
-                class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase transition disabled:opacity-50">
-          <span x-text="testing ? 'Testing Connection...' : 'Save & Test Connection'"></span>
+      <!-- Symbols Selection -->
+      <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
+        <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+          <span>🌐</span>
+          <span>Symbols (Trade Multiple at Once)</span>
+        </h2>
+        <p class="text-xs text-slate-400 mb-4">
+          Both indices can run simultaneously with independent market structure engines and order execution.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- BOOM1000 Option -->
+          <label class="p-4 rounded-xl border cursor-pointer flex items-start gap-3 transition"
+                 :class="isSymbolActive('BOOM1000') ? 'bg-[#0d2e3b] border-emerald-500 ring-1 ring-emerald-500/40':'bg-[#0a202a] border-[#184657] opacity-70'">
+            <input type="checkbox" class="w-5 h-5 rounded mt-0.5 accent-emerald-500"
+                   :checked="isSymbolActive('BOOM1000')" @change="toggleSymbol('BOOM1000')">
+            <div>
+              <div class="font-bold text-white flex items-center gap-1.5">
+                <span>🚀 BOOM 1000</span>
+                <span class="text-[10px] bg-emerald-950 border border-emerald-800 text-emerald-300 px-1.5 rounded">MULTUP</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">Confirmed bullish structure break &amp; retest enters MULTUP to capture upward spikes.</p>
+            </div>
+          </label>
+
+          <!-- CRASH1000 Option -->
+          <label class="p-4 rounded-xl border cursor-pointer flex items-start gap-3 transition"
+                 :class="isSymbolActive('CRASH1000') ? 'bg-[#0d2e3b] border-rose-500 ring-1 ring-rose-500/40':'bg-[#0a202a] border-[#184657] opacity-70'">
+            <input type="checkbox" class="w-5 h-5 rounded mt-0.5 accent-rose-500"
+                   :checked="isSymbolActive('CRASH1000')" @change="toggleSymbol('CRASH1000')">
+            <div>
+              <div class="font-bold text-white flex items-center gap-1.5">
+                <span>📉 CRASH 1000</span>
+                <span class="text-[10px] bg-rose-950 border border-rose-800 text-rose-300 px-1.5 rounded">MULTDOWN</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">Confirmed bearish structure break &amp; retest enters MULTDOWN to capture downward crashes.</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Timeframe & Position Execution -->
+      <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
+        <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+          <span>⏱️</span>
+          <span>Timeframe &amp; Position Execution</span>
+        </h2>
+        <p class="text-xs text-slate-400 mb-4">
+          Higher timeframe parent ladders (5m/15m or 15m/1h) and multi-timeframe confluence are automatically calculated.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Base Timeframe</label>
+            <select x-model.number="form.trading.timeframe_minutes" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white font-mono">
+              <option value="1">1 minute (Parents: 5m, 15m)</option>
+              <option value="2">2 minutes (Parents: 10m, 30m)</option>
+              <option value="5">5 minutes (Parents: 15m, 1h — Recommended)</option>
+              <option value="15">15 minutes (Parents: 1h, 4h)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Max Open Trades Per Symbol</label>
+            <select x-model.number="form.trading.max_open_trades_per_symbol" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white font-mono">
+              <option value="1">1 trade at a time</option>
+              <option value="2">2 trades</option>
+              <option value="3">3 trades</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk & Stake Sizing -->
+      <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
+        <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+          <span>🛡️</span>
+          <span>Stake &amp; Capital Sizing</span>
+        </h2>
+        <p class="text-xs text-slate-400 mb-4">
+          Specify stake calculation per entry. Stop Loss &amp; Take Profit are handled strictly by the Market Structure engine.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Risk Type</label>
+            <select x-model="form.trading.risk_type" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white">
+              <option value="percent">Percent of Account Balance (%)</option>
+              <option value="fixed">Fixed Stake in USD ($)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">
+              Stake Value <span x-text="form.trading.risk_type==='percent' ? '(%)' : '($)'"></span>
+            </label>
+            <input type="number" step="0.5" min="0.5" x-model.number="form.trading.risk_value"
+                   class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm font-mono text-white">
+          </div>
+        </div>
+      </div>
+
+      <!-- Deriv Account Credentials -->
+      <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
+        <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+          <span>🔑</span>
+          <span>Deriv Account Connection</span>
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Trading Mode</label>
+            <select x-model="form.mode" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white">
+              <option value="demo">Demo (Virtual Money — Deriv Paper)</option>
+              <option value="live">Live (Real Money Account)</option>
+            </select>
+            <p class="text-[11px] text-slate-500 mt-2">
+              Demo binds to your Deriv demo account; Live binds to your real account.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">App ID</label>
+            <input type="text" x-model="form.deriv.app_id"
+                   class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm font-mono text-white"
+                   placeholder="e.g. 33LuGFJlOlfbqzHVZLFCi">
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Personal Access Token (PAT)</label>
+            <input type="password" x-model="form.deriv.token"
+                   class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm font-mono text-white"
+                   placeholder="pat_... (Requires Read + Trade scopes)">
+            <p class="text-[11px] text-slate-500 mt-2">
+              Generated in <b>Deriv Dashboard &rarr; Account Settings &rarr; API Token</b> with <b>Read</b> and <b>Trade</b> scopes.
+            </p>
+          </div>
+
+          <div class="md:col-span-2 border-t border-[#133c4a] pt-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+            <div class="flex items-center gap-3">
+              <button type="button" @click="testToken" :disabled="testBusy"
+                      class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-5 rounded-lg text-xs transition disabled:opacity-50">
+                <span x-text="testBusy ? 'Testing Connection...' : 'Save & Test Connection'"></span>
+              </button>
+              <button type="button" @click="refreshAuth" class="text-xs text-slate-400 hover:text-white underline">
+                refresh status
+              </button>
+            </div>
+            <p class="text-xs font-mono font-bold" :class="auth.can_trade ? 'text-emerald-400' : 'text-amber-400'" x-text="authText()"></p>
+          </div>
+
+          <div class="md:col-span-2" x-show="testResult">
+            <p class="text-xs font-mono p-3 rounded-lg bg-black/60 border"
+               :class="testOk ? 'border-emerald-700 text-emerald-300' : 'border-rose-700 text-rose-300'"
+               x-text="testResult"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="flex justify-end pt-2">
+        <button type="submit" class="bg-cyan-600 hover:bg-cyan-500 text-white font-black py-4 px-10 rounded-xl shadow-xl tracking-wider text-sm transition">
+          SAVE CHANGES
         </button>
-        <span x-show="testResult" class="text-xs font-mono font-semibold"
-              :class="testOk ? 'text-emerald-400' : 'text-rose-400'"
-              x-text="testResult"></span>
-      </div>
-    </div>
-
-    <!-- Section 2: Strategy & Execution Timing -->
-    <div class="bg-[#0c2a33] p-6 rounded-xl border border-[#1a4d5a] shadow space-y-4">
-      <h2 class="text-base font-bold uppercase tracking-wider text-cyan-400 border-b border-[#16434f] pb-2">
-        2. Market, Timeframe & Trade Window
-      </h2>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Synthetic Symbol</label>
-          <select x-model="form.trading.symbol" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <template x-for="s in supportedSymbols" :key="s">
-              <option :value="s" x-text="s"></option>
-            </template>
-          </select>
-          <p class="text-[11px] text-slate-500 mt-1 italic">Supports 24/7 Volatility Indices.</p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Candle Timeframe</label>
-          <select x-model.number="form.trading.timeframe_minutes" @change="onTimeframeChange()" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <template x-for="tf in supportedTimeframes" :key="tf">
-              <option :value="tf" x-text="tf === 1 ? '1 Minute' : (tf + ' Minutes' + (tf === 5 ? ' (Default)' : ''))"></option>
-            </template>
-          </select>
-          <p class="text-[11px] text-slate-500 mt-1 italic">Defines the open price reference candle.</p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Duration in Ticks</label>
-          <input type="number" min="1" max="10" x-model.number="form.trading.duration_ticks"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Default 5 ticks (1 to 10 ticks supported).</p>
-        </div>
-
-        <div>
-          <div class="flex justify-between items-center mb-1">
-            <label class="block text-slate-400 text-xs font-semibold uppercase">Allowed Trade Window</label>
-            <span class="text-xs font-mono text-cyan-400 font-bold" x-text="formatWindowDisplay()"></span>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <div class="relative">
-                <input type="number" step="5" min="5" :max="(form.trading?.timeframe_minutes || 5) * 60"
-                       x-model.number="form.trading.trade_window_seconds"
-                       @input="onSecondsInput()"
-                       class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 pr-9 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-                <span class="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono">sec</span>
-              </div>
-            </div>
-            <div>
-              <div class="relative">
-                <input type="number" step="0.25" min="0.1" :max="form.trading?.timeframe_minutes || 5"
-                       x-model.number="form.trading.trade_window_minutes"
-                       @input="onMinutesInput()"
-                       class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 pr-9 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-                <span class="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono">min</span>
-              </div>
-            </div>
-          </div>
-          <p class="text-[11px] text-slate-500 mt-1 italic">
-            Entries allowed in first <span class="text-slate-300 font-mono" x-text="formatWindowDisplay()"></span> of each <span class="text-slate-300 font-mono" x-text="(form.trading?.timeframe_minutes || 5) + 'm'"></span> candle.
-          </p>
-        </div>
-
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Risk / Stake Type</label>
-          <select x-model="form.trading.risk_type" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <option value="fixed">Fixed Dollar Amount ($)</option>
-            <option value="percent">Percent of Account Balance (%)</option>
-          </select>
-          <p class="text-[11px] text-slate-500 mt-1 italic">Determines base stake calculation and auto Target Profit unit.</p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">
-            Base Stake (<span x-text="form.trading.risk_type === 'percent' ? '% of Balance' : '$'"></span>)
-          </label>
-          <input type="number" step="0.1" min="0.1" x-model.number="form.trading.risk_value"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">
-            <span x-show="form.trading.risk_type === 'percent'">Stakes this % of live balance (min $0.35).</span>
-            <span x-show="form.trading.risk_type !== 'percent'">Fixed dollar stake for trade 1 (min $0.35).</span>
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Breakout Lookback (Candles)</label>
-          <input type="number" min="5" max="200" step="5" x-model.number="form.trading.breakout_candles_count"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Past completed candles sampled for avg move from open (default 50).</p>
-        </div>
-
-        <div>
-          <div class="flex justify-between items-center mb-1">
-            <label class="block text-slate-400 text-xs font-semibold uppercase">Breakout Noise Filter (%)</label>
-            <span class="text-xs font-mono text-cyan-400 font-bold" x-text="(form.trading.breakout_threshold_pct != null ? form.trading.breakout_threshold_pct : 10) + '% of Avg'"></span>
-          </div>
-          <input type="number" min="0" max="100" step="1" x-model.number="form.trading.breakout_threshold_pct"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Required move beyond open to enter (above for rise, below for fall).</p>
-        </div>
       </div>
 
-      <div class="p-3 bg-[#082027] rounded-lg border border-[#16434f] text-[11px] text-slate-400 flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-2">
-        <span class="text-cyan-400 font-bold uppercase tracking-wider text-[10px] sm:text-xs flex-shrink-0">Breakout Noise Filter:</span>
-        <span>Calculates average high (rise) and low (fall) relative to open across the past <b class="text-white font-mono" x-text="form.trading.breakout_candles_count || 50">50</b> candles. Entry only triggers when spot moves past <b class="text-emerald-400 font-mono" x-text="(form.trading.breakout_threshold_pct || 10) + '%'">10%</b> of this historical average, preventing random entries on market noise.</span>
-      </div>
-    </div>
+    </form>
 
-    <!-- Section 3: Martingale Configuration -->
-    <div class="bg-[#0c2a33] p-6 rounded-xl border border-[#1a4d5a] shadow space-y-4">
-      <div class="flex justify-between items-center border-b border-[#16434f] pb-2">
-        <h2 class="text-base font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-          <span>3. Martingale Money Management</span>
-        </h2>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" x-model="form.martingale.enabled" class="w-5 h-5 accent-emerald-500 rounded">
-          <span class="text-xs font-bold uppercase" :class="form.martingale.enabled ? 'text-emerald-400' : 'text-slate-400'"
-                x-text="form.martingale.enabled ? 'ENABLED' : 'DISABLED'"></span>
-        </label>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Martingale Multiplier</label>
-          <input type="number" step="0.1" min="1.0" max="5.0" x-model.number="form.martingale.multiplier"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Multiplier applied after a loss (default 2.0x).</p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Max Consecutive Steps</label>
-          <input type="number" min="1" max="10" x-model.number="form.martingale.max_steps"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic">Caps the martingale sequence to protect balance (default 5 steps).</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Section 4: Target Profit & Stop Loss -->
-    <div class="bg-[#0c2a33] p-6 rounded-xl border border-[#1a4d5a] shadow space-y-4">
-      <div class="flex justify-between items-center border-b border-[#16434f] pb-2">
-        <h2 class="text-base font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-          <span>4. Target Profit & Stop Loss</span>
-        </h2>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" x-model="form.target_profit.enabled" class="w-5 h-5 accent-emerald-500 rounded">
-          <span class="text-xs font-bold uppercase" :class="form.target_profit.enabled ? 'text-emerald-400' : 'text-slate-400'"
-                x-text="form.target_profit.enabled ? 'TARGET ENABLED' : 'TARGET DISABLED'"></span>
-        </label>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">Target Scope</label>
-          <select x-model="form.target_profit.scope" class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-            <option value="candle_window" x-text="(form.trading?.timeframe_minutes || 5) + '-Minute Candle Window (Resets each candle)'"></option>
-            <option value="session">General / Session (Halts bot completely)</option>
-          </select>
-          <p class="text-[11px] text-slate-500 mt-1 italic">
-            <span x-show="form.target_profit.scope === 'candle_window' || form.target_profit.scope === '5m_window'"
-                  x-text="'Reaching TP/SL pauses bot until the next ' + (form.trading?.timeframe_minutes || 5) + 'm candle.'"></span>
-            <span x-show="form.target_profit.scope === 'session'">Reaching TP/SL stops the bot entirely until manually resumed.</span>
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">
-            Target Profit Value (<span class="text-emerald-400 font-bold" x-text="targetProfitUnit()"></span>)
-          </label>
-          <input type="number" step="0.5" min="0.1" x-model.number="form.target_profit.amount"
-                 class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          <p class="text-[11px] text-slate-500 mt-1 italic" x-text="targetProfitExplanation()"></p>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs mb-1 font-semibold uppercase">
-            Stop Loss Amount (<span class="text-rose-400 font-bold" x-text="targetProfitUnit()"></span>)
-          </label>
-          <div class="flex items-center gap-2">
-            <input type="checkbox" x-model="form.stop_loss.enabled" class="w-5 h-5 accent-rose-500 rounded" title="Enable Stop Loss">
-            <input type="number" step="1.0" min="0.5" x-model.number="form.stop_loss.amount"
-                   class="w-full bg-[#082027] border border-[#16434f] rounded-lg p-2.5 text-sm font-mono text-white focus:outline-none focus:border-cyan-400">
-          </div>
-          <p class="text-[11px] text-slate-500 mt-1 italic" x-text="stopLossExplanation()"></p>
-        </div>
-      </div>
-      <p class="text-[11px] text-cyan-400/80 italic pt-1">
-        ℹ Target Profit and Stop Loss strictly follow <b>Risk / Stake Type</b> set in Section 2 (<span class="font-mono font-bold" x-text="form.trading.risk_type === 'percent' ? '% of Balance' : 'Fixed Dollars ($)'"></span>).
-      </p>
-    </div>
-
-    <!-- Bottom Save Action -->
-    <div class="flex justify-end gap-3 pb-8">
-      <a href="/" class="px-5 py-2.5 rounded-lg bg-[#082027] hover:bg-[#12414d] text-slate-300 hover:text-white text-xs font-bold uppercase transition">
-        Cancel
-      </a>
-      <button @click="saveSettings()" :disabled="saving"
-              class="px-8 py-2.5 rounded-lg font-bold text-xs uppercase tracking-wider bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg disabled:opacity-50">
-        <span x-text="saving ? 'Saving...' : 'Save & Apply Settings'"></span>
-      </button>
-    </div>
-
+    <div x-show="message" x-transition x-text="message"
+         class="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg font-bold shadow-2xl text-white text-sm"
+         :class="messageType==='success' ? 'bg-emerald-600':'bg-rose-600'"></div>
   </div>
 
   <script>
-    function settingsApp() {
+    function settingsPage() {
       return {
         form: {
           mode: 'demo',
           deriv: { app_id: '', token: '' },
           trading: {
-            symbol: 'R_100',
+            symbols: ['BOOM1000', 'CRASH1000'],
+            currency: 'USD',
+            multiplier: 100,
             timeframe_minutes: 5,
-            duration_ticks: 5,
-            trade_window_seconds: 180,
-            trade_window_minutes: 3.0,
-            breakout_candles_count: 50,
-            breakout_threshold_pct: 10.0,
-            risk_type: 'fixed',
-            risk_value: 1.0,
-          },
-          martingale: { enabled: false, multiplier: 2.0, max_steps: 5 },
-          target_profit: { enabled: false, scope: 'candle_window', amount: 5.0 },
-          stop_loss: { enabled: false, amount: 20.0 }
+            risk_type: 'percent',
+            risk_value: 5.0,
+            max_open_trades_per_symbol: 1
+          }
         },
-        supportedSymbols: [],
-        supportedTimeframes: [1, 2, 3, 5, 10, 15],
-        saving: false,
-        saveSuccess: false,
-        testing: false,
+        supportedSymbols: ['BOOM1000', 'CRASH1000'],
+        supportedMultipliers: [100, 200, 300, 400, 500],
+        message: '',
+        messageType: '',
+        auth: {},
+        testBusy: false,
         testResult: '',
         testOk: false,
-
-        formatWindowDisplay() {
-          const s = Math.round(Number(this.form.trading?.trade_window_seconds || 180));
-          if (s <= 0) return '0m';
-          if (s % 60 === 0) return (s / 60) + 'm';
-          const m = (s / 60).toFixed(2).replace(/\.?0+$/, '');
-          return `${m}m (${s}s)`;
-        },
-
-        onSecondsInput() {
-          let s = Number(this.form.trading.trade_window_seconds);
-          if (isNaN(s) || s < 1) s = 5;
-          const maxSec = (this.form.trading.timeframe_minutes || 5) * 60;
-          if (s > maxSec) s = maxSec;
-          this.form.trading.trade_window_seconds = s;
-          this.form.trading.trade_window_minutes = Math.round((s / 60) * 100) / 100;
-        },
-
-        onMinutesInput() {
-          let m = Number(this.form.trading.trade_window_minutes);
-          if (isNaN(m) || m < 0.05) m = 0.1;
-          const maxMin = this.form.trading.timeframe_minutes || 5;
-          if (m > maxMin) m = maxMin;
-          this.form.trading.trade_window_minutes = m;
-          this.form.trading.trade_window_seconds = Math.round(m * 60);
-        },
-
-        onTimeframeChange() {
-          const maxSec = (this.form.trading.timeframe_minutes || 5) * 60;
-          if (!this.form.trading.trade_window_seconds || this.form.trading.trade_window_seconds > maxSec) {
-            this.form.trading.trade_window_seconds = (maxSec === 60) ? 45 : Math.round(maxSec * 0.6);
-            this.form.trading.trade_window_minutes = Math.round((this.form.trading.trade_window_seconds / 60) * 100) / 100;
-          }
-        },
-
-        targetProfitUnit() {
-          return (this.form.trading?.risk_type === 'percent') ? '%' : '$';
-        },
-
-        targetProfitExplanation() {
-          const unit = this.targetProfitUnit();
-          if (unit === '%') {
-            return `Target profit is calculated dynamically as ${this.form.target_profit?.amount || 5}% of your live account balance.`;
-          }
-          return `Target profit is a fixed $${Number(this.form.target_profit?.amount || 5).toFixed(2)} gain.`;
-        },
-
-        stopLossExplanation() {
-          const unit = this.targetProfitUnit();
-          if (unit === '%') {
-            return `Stop loss halts the bot if drawdown reaches ${this.form.stop_loss?.amount || 20}% of account balance.`;
-          }
-          return `Stop loss halts the bot at a fixed $${Number(this.form.stop_loss?.amount || 20).toFixed(2)} loss.`;
-        },
 
         async init() {
           try {
             const res = await fetch('/api/settings');
-            if (res.ok) {
-              const data = await res.json();
-              this.form = Object.assign(this.form, data);
-              this.supportedSymbols = data.supported_symbols || ['R_100', 'R_75', 'R_50', 'R_25', 'R_10'];
-              this.supportedTimeframes = data.supported_timeframes || [1, 2, 3, 5, 10, 15];
-              if (!this.form.trading.trade_window_seconds) {
-                this.form.trading.trade_window_seconds = Math.round((this.form.trading.trade_window_minutes || 3.0) * 60);
-              }
-              if (!this.form.trading.trade_window_minutes) {
-                this.form.trading.trade_window_minutes = Math.round((this.form.trading.trade_window_seconds / 60) * 100) / 100;
-              }
+            const data = await res.json();
+            this.form = data;
+            this.supportedMultipliers = data.supported_multipliers || [100, 200, 300, 400, 500];
+          } catch (e) {}
+          await this.refreshAuth();
+        },
+
+        isSymbolActive(sym) {
+          return Array.isArray(this.form.trading?.symbols) && this.form.trading.symbols.includes(sym);
+        },
+
+        toggleSymbol(sym) {
+          if (!Array.isArray(this.form.trading.symbols)) this.form.trading.symbols = [];
+          const idx = this.form.trading.symbols.indexOf(sym);
+          if (idx >= 0) {
+            if (this.form.trading.symbols.length === 1) {
+              alert('At least one symbol must remain active.');
+              return;
             }
-          } catch (e) {
-            console.error("Failed to load settings:", e);
+            this.form.trading.symbols.splice(idx, 1);
+          } else {
+            this.form.trading.symbols.push(sym);
           }
         },
 
-        async saveSettings() {
-          this.saving = true;
-          this.saveSuccess = false;
+        async save() {
           try {
-            this.form.trading.trade_window_seconds = Number(this.form.trading.trade_window_seconds);
-            this.form.trading.trade_window_minutes = Math.round((this.form.trading.trade_window_seconds / 60) * 100) / 100;
-            this.form.trading.breakout_candles_count = Math.max(5, Math.min(200, parseInt(this.form.trading.breakout_candles_count) || 50));
-            this.form.trading.breakout_threshold_pct = Math.max(0, Math.min(100, parseFloat(this.form.trading.breakout_threshold_pct) || 0));
-            const res = await fetch('/api/settings', {
+            const r = await fetch('/api/settings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(this.form)
             });
-            const data = await res.json();
-            if (data.ok) {
-              this.saveSuccess = true;
-              setTimeout(() => { this.saveSuccess = false; }, 4000);
-            } else {
-              alert("Error saving: " + (data.error || 'Failed'));
-            }
+            if (r.ok) {
+              this.message = 'Settings saved successfully!';
+              this.messageType = 'success';
+            } else throw new Error();
           } catch (e) {
-            alert("Save request failed: " + e);
-          } finally {
-            this.saving = false;
+            this.message = 'Error saving settings';
+            this.messageType = 'error';
           }
+          setTimeout(() => this.message = '', 3500);
         },
 
-        async testConnection() {
-          this.testing = true;
-          this.testResult = '';
-          this.testOk = false;
+        async refreshAuth() {
           try {
-            // First save credentials
-            await this.saveSettings();
+            this.auth = await (await fetch('/api/auth-status')).json();
+          } catch (e) { this.auth = {}; }
+        },
 
-            const res = await fetch('/api/test_token', {
+        async testToken() {
+          this.testBusy = true;
+          this.testResult = '';
+          try {
+            await fetch('/api/settings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                app_id: this.form.deriv.app_id,
-                token: this.form.deriv.token,
-                mode: this.form.mode
-              })
+              body: JSON.stringify(this.form)
             });
-            const data = await res.json();
-            if (data.ok) {
-              this.testOk = true;
-              this.testResult = `Connected! Account: ${data.account_id} (${data.account_type.toUpperCase()}) | Balance: ${data.currency} ${data.balance}`;
+            await new Promise(r => setTimeout(r, 2000));
+            const d = await (await fetch('/api/test-connection', { method: 'POST' })).json();
+            if (d.authorized) {
+              this.testOk = d.can_trade;
+              this.testResult = (d.can_trade ? 'Active ✓  ' : 'Connected (Guard: ' + d.guard + ')  ') +
+                (d.account_type === 'demo' ? 'DEMO ' : 'REAL ') + (d.account_id || '') +
+                '  ·  Balance: ' + (d.currency || 'USD') + ' ' + (d.balance != null ? Number(d.balance).toFixed(2) : '—');
             } else {
               this.testOk = false;
-              this.testResult = "Connection Failed: " + (data.error || 'Unknown error');
+              this.testResult = 'Connection Failed: ' + (d.error || d.guard || 'Check App ID and Personal Access Token');
             }
           } catch (e) {
             this.testOk = false;
-            this.testResult = "Error: " + e;
-          } finally {
-            this.testing = false;
+            this.testResult = 'Network or server error during connection test.';
           }
+          await this.refreshAuth();
+          this.testBusy = false;
+        },
+
+        authText() {
+          const a = this.auth || {};
+          if (a.can_trade) return 'Active ✓ (' + (a.account_type === 'demo' ? 'DEMO' : 'REAL') + ' ' + (a.account_id || '') + ')';
+          if (a.authorized) return 'Connected · ' + (a.guard || '');
+          if (a.has_token) return 'Connecting to Deriv…';
+          return 'Not Connected — Enter App ID and PAT';
         }
-      }
+      };
     }
   </script>
 </body>

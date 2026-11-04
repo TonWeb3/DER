@@ -2,873 +2,1032 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Deriv • Rise & Fall Bot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Spikebot 3.00 — Market Structure Multipliers</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lightweight Charts: local bundle with CDN fallback -->
+    <script src="/static/lightweight-charts.standalone.production.js"></script>
+    <script>
+      if (typeof LightweightCharts === 'undefined') {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js';
+        document.head.appendChild(s);
+      }
+    </script>
     <style>
         [x-cloak] { display: none !important; }
-        body { font-family: 'Outfit', sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .pulse-dot {
-            box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
-            animation: pulse-glow 2s infinite;
-        }
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.9); }
-        }
-        /* Custom slim scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #06171d;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #16434f;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #206375;
-        }
+        .font-mono { font-family: 'ui-monospace','SFMono-Regular','Menlo','Consolas',monospace; }
+        .pulse-dot { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
     </style>
 </head>
-<body class="bg-[#06171d] text-slate-100 min-h-screen p-2.5 sm:p-4 md:p-6 pb-24 sm:pb-8" x-data="app()" x-cloak>
-  <div class="max-w-6xl mx-auto space-y-3 sm:space-y-5 md:space-y-6">
-
-    <!-- Top Navigation Header -->
-    <header class="bg-[#0c2a33] p-3 sm:p-4 rounded-xl border border-[#1a4d5a] shadow-lg space-y-3 sm:space-y-0 sm:flex sm:justify-between sm:items-center">
-      <!-- Brand & Mode Row -->
-      <div class="flex items-center justify-between sm:justify-start gap-3">
-        <div class="flex items-center gap-2.5 sm:gap-3">
-          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center font-black text-xl shadow text-slate-950 flex-shrink-0">
-            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-            </svg>
-          </div>
-          <div>
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <h1 class="text-base sm:text-xl font-bold tracking-tight text-white leading-tight">Rise & Fall Bot</h1>
-              <span class="text-[10px] sm:text-xs px-1.5 py-0.5 rounded font-bold uppercase tracking-wider"
-                    :class="data.trading_state?.mode === 'live' ? 'bg-rose-700/80 text-rose-100 border border-rose-600' : 'bg-amber-600/80 text-amber-100 border border-amber-500'"
-                    x-text="data.trading_state?.mode || 'demo'"></span>
-            </div>
-            <p class="text-[11px] sm:text-xs text-slate-400 font-mono">
-              <span class="text-cyan-400 font-bold" x-text="(data.trading_state?.symbol || 'R_100') + ' • ' + (data.strategy_status?.timeframe_minutes || 5) + 'm'"></span>
-              <span class="text-slate-500"> | </span>
-              <span x-text="(data.strategy_status?.duration_ticks || 5) + ' Ticks Expiry'"></span>
-            </p>
-          </div>
+<body class="bg-[#051319] text-slate-100 min-h-screen p-3 sm:p-6" x-data="spikebotApp()" x-cloak>
+  <div class="max-w-7xl mx-auto space-y-5">
+    
+    <!-- Top Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#09222c] p-4 rounded-xl border border-[#133c4a]">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-cyan-600 to-amber-500 flex items-center justify-center font-black text-xl shadow-lg">⚡</div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            Spikebot 3.00
+            <span class="text-amber-400 text-xs font-bold uppercase tracking-wider bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded">
+              Structure Atlas
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">
+            Confirmed Swings · BOS/CHoCH · Role-Reversal Retest · Closed-Parent Confluence
+          </p>
         </div>
-
-        <!-- Settings Link on Mobile (top right) -->
-        <a href="/settings" class="sm:hidden p-2 rounded-lg bg-[#082027] hover:bg-[#12414d] border border-[#16434f] text-slate-300 hover:text-white transition" title="Bot Settings">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          </svg>
-        </a>
       </div>
 
-      <!-- Controls & Balance Row -->
-      <div class="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 pt-2 sm:pt-0 border-t border-[#16434f] sm:border-0">
-        <!-- Live WS Status Dots -->
-        <div class="flex items-center gap-1.5 sm:gap-2 bg-[#082027] px-2.5 py-1.5 rounded-lg border border-[#16434f] text-[10px] sm:text-[11px]">
-          <div class="flex items-center gap-1" title="Deriv API WebSocket">
-            <span class="w-2 h-2 rounded-full" :class="data.trading_state?.connected ? 'bg-emerald-400 pulse-dot' : 'bg-rose-500'"></span>
-            <span class="text-slate-400">Deriv</span>
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Status Badges -->
+        <div class="flex items-center text-[11px] gap-2 bg-[#0d2e3b] px-3 py-1.5 rounded-lg border border-[#174859]">
+          <div class="flex items-center">
+            <span class="w-2 h-2 rounded-full mr-1.5" :class="data.trading_state?.connected ? 'bg-emerald-400 pulse-dot' : 'bg-rose-500'"></span>
+            <span class="text-slate-300">Deriv WS</span>
           </div>
           <span class="text-slate-600">|</span>
-          <div class="flex items-center gap-1" title="Browser Live Stream WebSocket">
-            <span class="w-2 h-2 rounded-full" :class="wsConnected ? 'bg-emerald-400 pulse-dot' : 'bg-rose-500'"></span>
-            <span class="text-slate-400">Live</span>
+          <div class="flex items-center">
+            <span class="w-2 h-2 rounded-full mr-1.5" :class="data.trading_state?.authorized ? 'bg-emerald-400' : 'bg-amber-500'"></span>
+            <span class="text-slate-300">Auth</span>
+          </div>
+          <span class="text-slate-600">|</span>
+          <div class="flex items-center">
+            <span class="w-2 h-2 rounded-full mr-1.5" :class="wsConnected ? 'bg-cyan-400 pulse-dot' : 'bg-rose-500'"></span>
+            <span class="text-slate-300">Live WS</span>
           </div>
         </div>
 
-        <!-- Balance Display -->
-        <div class="text-right">
-          <div class="text-[9px] sm:text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Account Balance</div>
-          <div class="text-base sm:text-xl font-bold font-mono leading-tight"
-               :class="data.trading_state?.is_virtual ? 'text-amber-300' : 'text-emerald-400'"
-               x-text="formatCurrency(data.trading_state?.balance, data.trading_state?.currency)">$0.00</div>
+        <!-- Account Balance -->
+        <div class="flex flex-col items-end leading-tight bg-[#0d2e3b] px-4 py-1.5 rounded-lg border border-[#174859]">
+          <span class="text-[9px] uppercase tracking-wider text-slate-400" x-text="(data.trading_state?.mode || 'demo') + ' balance'"></span>
+          <span class="text-base sm:text-lg font-bold font-mono" :class="data.trading_state?.is_virtual ? 'text-amber-400':'text-emerald-400'"
+                x-text="data.trading_state?.balance != null ? (data.trading_state.currency||'USD')+' '+Number(data.trading_state.balance).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'"></span>
         </div>
 
         <!-- Start / Stop Button -->
         <button @click="running ? stopBot() : startBot()" :disabled="botBusy"
-                class="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-black uppercase text-xs tracking-wider transition shadow-lg flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0"
-                :class="running ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'">
-          <span x-show="!botBusy && !running">▶ Start Bot</span>
-          <span x-show="!botBusy && running">■ Stop Bot</span>
-          <span x-show="botBusy">...</span>
-        </button>
+                class="px-5 py-2.5 rounded-lg font-black uppercase text-xs tracking-wider transition shadow-lg disabled:opacity-60"
+                :class="running ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-950/50':'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/50'"
+                x-text="botBusy ? '…' : (running ? '■ Stop Bot' : '▶ Start Bot')"></button>
 
-        <!-- Settings Button on Desktop -->
-        <a href="/settings" class="hidden sm:inline-flex p-2.5 rounded-xl bg-[#082027] hover:bg-[#12414d] border border-[#16434f] text-slate-300 hover:text-white transition" title="Bot Settings">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          </svg>
-        </a>
+        <a href="/settings" class="bg-[#0d2e3b] hover:bg-[#154659] p-2.5 rounded-lg border border-[#174859] text-slate-300 hover:text-white transition">⚙</a>
       </div>
     </header>
 
-    <!-- Trading Guard Alert -->
-    <div x-show="data.trading_state && !data.trading_state.can_trade"
-         class="p-3 sm:p-3.5 rounded-xl bg-amber-950/40 border border-amber-700/60 text-amber-200 text-xs flex items-center justify-between gap-2">
+    <!-- Guard Alert (if trading disabled) -->
+    <div x-show="data.trading_state && !data.trading_state.can_trade" class="p-3.5 rounded-lg bg-amber-950/60 border border-amber-700/80 text-amber-200 text-xs flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <span class="text-amber-400 font-bold">⚠</span>
-        <span x-text="guardText()">Trading is disabled</span>
+        <span>⚠️</span>
+        <span>Trading disabled — <b x-text="guardText()"></b>. Real-time market structure, pivots, and retest zones are active.</span>
       </div>
-      <a href="/settings" class="underline hover:text-white font-semibold flex-shrink-0">Settings</a>
+      <a href="/settings" class="underline text-amber-300 font-bold ml-2">Configure Settings &rarr;</a>
     </div>
 
-    <!-- Key Metrics Grid (Mobile: 2 cols with countdown spanning full width, Desktop: 3 cols) -->
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
-
-      <!-- Card 1: Spot Price -->
-      <div class="col-span-1 bg-[#0c2a33] p-3.5 sm:p-5 rounded-xl border border-[#1a4d5a] shadow relative overflow-hidden flex flex-col justify-between">
-        <div class="flex justify-between items-start gap-1">
-          <p class="text-slate-400 text-[10px] sm:text-xs uppercase font-bold tracking-wider truncate" x-text="(data.trading_state?.symbol || 'R_100') + ' Spot'"></p>
-          <span class="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded bg-[#082027] text-slate-400 font-mono flex-shrink-0">Live</span>
-        </div>
-        <div class="my-1.5 sm:my-2">
-          <h2 class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight leading-none"
-              x-text="data.prices?.spot != null ? Number(data.prices.spot).toFixed(data.prices.pip_size || 2) : '---'"></h2>
-        </div>
-        <div class="text-[10px] sm:text-xs text-slate-400 flex items-center justify-between">
-          <span>Spread / Pip</span>
-          <span class="font-mono text-cyan-400 font-bold" x-text="(data.prices?.pip_size || 2) + ' dec'">2 dec</span>
+    <!-- Active Multiplier & Mode Banner -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+      <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
+        <span class="text-slate-400 text-[10px] uppercase font-bold">Multiplier Leverage</span>
+        <div class="text-lg font-black text-amber-400 font-mono mt-0.5" x-text="(data.trading_state?.multiplier || 100)+'x'"></div>
+      </div>
+      <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
+        <span class="text-slate-400 text-[10px] uppercase font-bold">Strategy Engine</span>
+        <div class="text-sm font-bold text-emerald-300 mt-1 uppercase flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>Active Structure ⚡</span>
         </div>
       </div>
-
-      <!-- Card 2: Candle Open Price & Delta -->
-      <div class="col-span-1 bg-[#0c2a33] p-3.5 sm:p-5 rounded-xl border border-[#1a4d5a] shadow flex flex-col justify-between">
-        <div class="flex justify-between items-start gap-1">
-          <p class="text-slate-400 text-[10px] sm:text-xs uppercase font-bold tracking-wider truncate"
-             x-text="(data.strategy_status?.timeframe_minutes || 5) + 'm Open'">5m Open</p>
-          <span class="text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0"
-                :class="data.signal?.direction === 'CALL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : (data.signal?.direction === 'PUT' ? 'bg-rose-950 text-rose-400 border border-rose-800' : (data.signal?.label === 'NOISE' ? 'bg-amber-950/70 text-amber-400 border border-amber-800' : 'bg-slate-800 text-slate-400'))">
-            <span x-text="data.signal?.label || 'WAIT'"></span>
-          </span>
-        </div>
-        <div class="my-1.5 sm:my-2 flex flex-wrap items-baseline gap-1.5">
-          <h2 class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight leading-none"
-              x-text="data.signal?.open_price != null ? Number(data.signal.open_price).toFixed(data.prices?.pip_size || 2) : '---'"></h2>
-          <span class="text-xs sm:text-sm font-bold font-mono"
-                :class="data.signal?.diff > 0 ? 'text-emerald-400' : (data.signal?.diff < 0 ? 'text-rose-400' : 'text-slate-400')"
-                x-text="data.signal?.diff != null ? (data.signal.diff > 0 ? '+' : '') + Number(data.signal.diff).toFixed(data.prices?.pip_size || 2) : ''"></span>
-        </div>
-        <div class="space-y-1">
-          <div class="text-[10px] sm:text-xs text-slate-400 flex items-center justify-between">
-            <span>Delta</span>
-            <span class="font-mono font-bold" :class="data.signal?.diff_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'"
-                  x-text="data.signal?.diff_pct != null ? (data.signal.diff_pct > 0 ? '+' : '') + data.signal.diff_pct.toFixed(2) + '%' : '0.00%'"></span>
-          </div>
-          <div class="text-[10px] sm:text-xs text-slate-400 flex items-center justify-between pt-1 border-t border-[#123640]">
-            <span title="Minimum move beyond open required to filter noise">Breakout Target</span>
-            <span class="font-mono text-cyan-300 font-bold"
-                  x-text="data.signal?.breakout?.rise_threshold > 0 ? ('±' + formatDec(data.signal?.breakout?.rise_threshold) + ' (' + (data.strategy_status?.breakout_threshold_pct || 10) + '%)') : '---'"></span>
-          </div>
-        </div>
+      <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
+        <span class="text-slate-400 text-[10px] uppercase font-bold">Risk Per Trade</span>
+        <div class="text-sm font-bold text-slate-200 font-mono mt-1" x-text="(data.trading_state?.risk?.type==='percent' ? (data.trading_state.risk.value+'% of balance') : ('$'+data.trading_state?.risk?.value))"></div>
       </div>
-
-      <!-- Card 3: Candle Countdown & Allowed Trade Window (Spans full 2 cols on mobile) -->
-      <div class="col-span-2 md:col-span-1 bg-[#0c2a33] p-3.5 sm:p-5 rounded-xl border border-[#1a4d5a] shadow flex flex-col justify-between">
-        <div class="flex justify-between items-start">
-          <p class="text-slate-400 text-[10px] sm:text-xs uppercase font-bold tracking-wider"
-             x-text="(data.strategy_status?.timeframe_minutes || 5) + 'm Candle Countdown'">5m Candle Countdown</p>
-          <span class="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded uppercase"
-                :class="data.timing?.in_trade_window ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'">
-            <span x-text="data.timing?.in_trade_window ? 'Window Active' : 'Window Closed'"></span>
-          </span>
+      <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
+        <span class="text-slate-400 text-[10px] uppercase font-bold">TP / SL Mode</span>
+        <div class="text-sm font-bold text-cyan-300 font-mono mt-1 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+          <span>Structural Only ⚡</span>
         </div>
-        <div class="my-1.5 sm:my-2 flex items-baseline justify-between">
-          <h2 class="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight leading-none"
-              x-text="formatSeconds(data.timing?.remaining_seconds)">05:00</h2>
-          <span class="text-xs text-slate-400">
-            Window: <b class="font-mono" :class="data.timing?.in_trade_window ? 'text-emerald-300' : 'text-amber-400'"
-                       x-text="data.timing?.in_trade_window ? formatSeconds(data.timing?.window_remaining_seconds) + ' left' : 'Closed'"></b>
-          </span>
-        </div>
-
-        <!-- Candle Timeline Progress Bar -->
-        <div class="mt-1 relative w-full h-2.5 sm:h-3 bg-[#082027] rounded-full overflow-hidden border border-[#16434f]">
-          <!-- Allowed trade window zone (e.g. 60% of candle) -->
-          <div class="absolute top-0 left-0 bottom-0 bg-emerald-900/40 border-r-2 border-emerald-500"
-               :style="'width: ' + (data.timing?.window_limit_pct || 60) + '%;'"
-               title="Allowed Trading Zone"></div>
-          <!-- Elapsed progress bar -->
-          <div class="absolute top-0 left-0 bottom-0 transition-all duration-500 rounded-full"
-               :class="data.timing?.in_trade_window ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-gradient-to-r from-cyan-600 to-amber-500'"
-               :style="'width: ' + (data.timing?.progress_pct || 0) + '%;'"></div>
-        </div>
-        <div class="mt-1 flex justify-between text-[9px] sm:text-[10px] text-slate-500 font-mono">
-          <span>0m (Open)</span>
-          <span class="text-emerald-400 font-bold" x-text="formatWindowCutoff(data.timing?.trade_window_seconds, data.strategy_status?.trade_window_minutes)">3m (Cutoff)</span>
-          <span x-text="(data.strategy_status?.timeframe_minutes || 5) + 'm (Close)'">5m (Close)</span>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Hero Strategy & Signal Banner -->
-    <div class="bg-[#0c2a33] p-4 sm:p-6 rounded-2xl border-t-4 border-cyan-400 shadow-xl text-center relative overflow-hidden">
-      <div class="text-[10px] sm:text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">Current Trade Signal</div>
-
-      <!-- Big Direction Display (Responsive font sizes) -->
-      <div class="py-1 sm:py-2 flex items-center justify-center gap-2 sm:gap-3">
-        <template x-if="data.signal?.direction === 'CALL'">
-          <div class="flex items-center gap-2 sm:gap-3 text-emerald-400">
-            <svg class="w-8 h-8 sm:w-12 sm:h-12 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
-            </svg>
-            <span class="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight">RISE (CALL)</span>
-          </div>
-        </template>
-        <template x-if="data.signal?.direction === 'PUT'">
-          <div class="flex items-center gap-2 sm:gap-3 text-rose-500">
-            <svg class="w-8 h-8 sm:w-12 sm:h-12 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-            </svg>
-            <span class="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight">FALL (PUT)</span>
-          </div>
-        </template>
-        <template x-if="!data.signal?.direction">
-          <div class="text-2xl sm:text-4xl md:text-5xl font-extrabold"
-               :class="data.signal?.label === 'NOISE' ? 'text-amber-400' : 'text-slate-400'">
-            <span x-text="data.signal?.label === 'NOISE' ? 'NOISE BUFFER / WAITING' : 'NEUTRAL / WAITING'"></span>
-          </div>
-        </template>
-      </div>
-
-      <div class="mt-1 text-[11px] sm:text-xs text-slate-300 font-mono">
-        <span x-show="data.signal?.direction === 'CALL'">
-          Breakout: Spot (<span class="text-emerald-300 font-bold" x-text="formatDec(data.prices?.spot)"></span>) ≥ Open (<span class="text-slate-200" x-text="formatDec(data.signal?.open_price)"></span>) + <span class="text-emerald-400 font-bold" x-text="formatDec(data.signal?.breakout?.rise_threshold)"></span>
-        </span>
-        <span x-show="data.signal?.direction === 'PUT'">
-          Breakout: Spot (<span class="text-rose-300 font-bold" x-text="formatDec(data.prices?.spot)"></span>) ≤ Open (<span class="text-slate-200" x-text="formatDec(data.signal?.open_price)"></span>) - <span class="text-rose-400 font-bold" x-text="formatDec(data.signal?.breakout?.fall_threshold)"></span>
-        </span>
-        <span x-show="!data.signal?.direction && data.signal?.breakout?.in_noise_buffer">
-          Noise Filter Active: Spot within <span class="text-amber-400 font-bold" x-text="'±' + formatDec(data.signal?.breakout?.rise_threshold)"></span> buffer of Open (<span class="text-cyan-300" x-text="(data.strategy_status?.breakout_threshold_pct || 10) + '% of ' + (data.strategy_status?.breakout_candles_count || 50) + 'c avg'"></span>)
-        </span>
-        <span x-show="!data.signal?.direction && !data.signal?.breakout?.in_noise_buffer">
-          Spot is equal to Open price or awaiting ticks
-        </span>
-      </div>
-
-      <!-- Execution Status Pills (Responsive Wrapping) -->
-      <div class="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
-        <span class="px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider max-w-full truncate text-center"
-              :class="reasonBadgeClass(data.strategy_status?.reason)"
-              :title="data.strategy_status?.reason || 'stopped'">
-          Status: <span x-text="data.strategy_status?.reason || 'stopped'"></span>
-        </span>
-        <span class="px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-mono bg-[#082027] border border-[#16434f] text-slate-300">
-          Duration: <b class="text-cyan-400" x-text="(data.strategy_status?.duration_ticks || 5) + ' Ticks'"></b>
-        </span>
-        <span class="px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-mono bg-[#082027] border border-[#16434f] text-slate-300">
-          Window: <b class="text-cyan-400" x-text="formatWindowMinutes(data.strategy_status?.trade_window_seconds, data.strategy_status?.trade_window_minutes)"></b>
-        </span>
-        <span class="px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-mono bg-[#082027] border border-[#16434f] text-slate-300">
-          Breakout: <b class="text-cyan-400" x-text="(data.strategy_status?.breakout_threshold_pct || 10) + '% (' + (data.strategy_status?.breakout_candles_count || 50) + 'c)'"></b>
-        </span>
       </div>
     </div>
 
-    <!-- Management Controls: Martingale & Target Profit & Performance -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-4">
+    <!-- Multi-Symbol Live Spikebot Cards (BOOM1000 & CRASH1000) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      
+      <!-- BOOM 1000 Card -->
+      <div class="bg-[#09222c] p-4 rounded-xl border border-[#133c4a] relative overflow-hidden transition"
+           :class="activeChartSymbol==='BOOM1000' ? 'ring-2 ring-cyan-500 bg-[#0d2a37]' : ''">
+        <div class="flex justify-between items-start mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🚀</span>
+            <div>
+              <h2 class="text-lg font-black text-emerald-400 flex items-center gap-2">
+                BOOM 1000
+                <span class="text-[10px] font-bold bg-emerald-950/70 border border-emerald-800 text-emerald-300 px-1.5 py-0.5 rounded">MULTUP</span>
+              </h2>
+              <p class="text-[10px] text-slate-400">Bullish structure break &amp; retest &rarr; MULTUP</p>
+            </div>
+          </div>
+          <button @click="switchChart('BOOM1000')" class="px-2.5 py-1 text-[11px] font-bold rounded border transition"
+                  :class="activeChartSymbol==='BOOM1000' ? 'bg-cyan-600 border-cyan-500 text-white':'bg-[#103442] border-[#1d4c5e] text-slate-300 hover:text-white'">
+            <span x-text="activeChartSymbol==='BOOM1000' ? '● Chart Active' : 'Show Chart'"></span>
+          </button>
+        </div>
 
-      <!-- Martingale Status Card -->
-      <div class="bg-[#0c2a33] p-3.5 sm:p-5 rounded-xl border border-[#1a4d5a] shadow flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-center mb-2.5">
-            <h3 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <span>Martingale</span>
-              <span class="w-2 h-2 rounded-full" :class="data.martingale?.enabled ? 'bg-emerald-400' : 'bg-slate-600'"></span>
-            </h3>
-            <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase"
-                  :class="data.martingale?.enabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-slate-800 text-slate-400'">
-              <span x-text="data.martingale?.enabled ? 'ENABLED' : 'OFF'"></span>
+        <div class="grid grid-cols-2 gap-2 my-2.5 bg-[#06171f] p-3 rounded-lg border border-[#113745] text-xs">
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Spot Price</span>
+            <div class="text-xl font-black font-mono text-white mt-0.5" x-text="symSpot('BOOM1000')"></div>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Trend</span>
+            <div class="text-sm font-bold font-mono mt-1" :class="symDirClass('BOOM1000')" x-text="symDir('BOOM1000')"></div>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Break</span>
+            <div class="text-xs font-bold font-mono text-slate-200 mt-0.5" x-text="symBreak('BOOM1000')"></div>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Retest Zone</span>
+            <div class="text-xs font-bold font-mono mt-0.5" :class="symZoneClass('BOOM1000')" x-text="symZoneText('BOOM1000')"></div>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center text-xs text-slate-300">
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Support / Resistance:</span>
+            <span class="font-mono font-bold text-emerald-400" x-text="'S '+symSupport('BOOM1000')"></span>
+            <span class="text-slate-500">·</span>
+            <span class="font-mono font-bold text-rose-400" x-text="'R '+symResistance('BOOM1000')"></span>
+          </div>
+          <div class="font-bold text-[11px]" :class="symSignalConfirmed('BOOM1000') ? 'text-emerald-400 font-black' : 'text-slate-400'">
+            <span x-text="symSignalConfirmed('BOOM1000') ? '⚡ SETUP CONFIRMED (BUY)' : 'Awaiting Retest'"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CRASH 1000 Card -->
+      <div class="bg-[#09222c] p-4 rounded-xl border border-[#133c4a] relative overflow-hidden transition"
+           :class="activeChartSymbol==='CRASH1000' ? 'ring-2 ring-cyan-500 bg-[#0d2a37]' : ''">
+        <div class="flex justify-between items-start mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">📉</span>
+            <div>
+              <h2 class="text-lg font-black text-rose-400 flex items-center gap-2">
+                CRASH 1000
+                <span class="text-[10px] font-bold bg-rose-950/70 border border-rose-800 text-rose-300 px-1.5 py-0.5 rounded">MULTDOWN</span>
+              </h2>
+              <p class="text-[10px] text-slate-400">Bearish structure break &amp; retest &rarr; MULTDOWN</p>
+            </div>
+          </div>
+          <button @click="switchChart('CRASH1000')" class="px-2.5 py-1 text-[11px] font-bold rounded border transition"
+                  :class="activeChartSymbol==='CRASH1000' ? 'bg-cyan-600 border-cyan-500 text-white':'bg-[#103442] border-[#1d4c5e] text-slate-300 hover:text-white'">
+            <span x-text="activeChartSymbol==='CRASH1000' ? '● Chart Active' : 'Show Chart'"></span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 my-2.5 bg-[#06171f] p-3 rounded-lg border border-[#113745] text-xs">
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Spot Price</span>
+            <div class="text-xl font-black font-mono text-white mt-0.5" x-text="symSpot('CRASH1000')"></div>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Trend</span>
+            <div class="text-sm font-bold font-mono mt-1" :class="symDirClass('CRASH1000')" x-text="symDir('CRASH1000')"></div>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Break</span>
+            <div class="text-xs font-bold font-mono text-slate-200 mt-0.5" x-text="symBreak('CRASH1000')"></div>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Retest Zone</span>
+            <div class="text-xs font-bold font-mono mt-0.5" :class="symZoneClass('CRASH1000')" x-text="symZoneText('CRASH1000')"></div>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center text-xs text-slate-300">
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Support / Resistance:</span>
+            <span class="font-mono font-bold text-emerald-400" x-text="'S '+symSupport('CRASH1000')"></span>
+            <span class="text-slate-500">·</span>
+            <span class="font-mono font-bold text-rose-400" x-text="'R '+symResistance('CRASH1000')"></span>
+          </div>
+          <div class="font-bold text-[11px]" :class="symSignalConfirmed('CRASH1000') ? 'text-rose-400 font-black' : 'text-slate-400'">
+            <span x-text="symSignalConfirmed('CRASH1000') ? '⚡ SETUP CONFIRMED (SELL)' : 'Awaiting Retest'"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Candlestick Chart Section with Symbol Switcher -->
+    <div class="bg-[#09222c] rounded-xl border border-[#133c4a] overflow-hidden">
+      <!-- Chart Controls Header -->
+      <div class="p-3 sm:p-4 bg-[#0d2a37] border-b border-[#133c4a] flex flex-wrap justify-between items-center gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase font-bold text-slate-400">Chart:</span>
+          <!-- Symbol Switcher Tabs -->
+          <div class="flex bg-[#06171f] p-1 rounded-lg border border-[#133c4a]">
+            <button @click="switchChart('BOOM1000')"
+                    class="px-3 py-1 text-xs font-bold rounded-md transition flex items-center gap-1.5"
+                    :class="activeChartSymbol==='BOOM1000' ? 'bg-emerald-600 text-white shadow':'text-slate-400 hover:text-white'">
+              <span>🚀 BOOM 1000</span>
+            </button>
+            <button @click="switchChart('CRASH1000')"
+                    class="px-3 py-1 text-xs font-bold rounded-md transition flex items-center gap-1.5"
+                    :class="activeChartSymbol==='CRASH1000' ? 'bg-rose-600 text-white shadow':'text-slate-400 hover:text-white'">
+              <span>📉 CRASH 1000</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="text-xs text-slate-400 font-mono hidden sm:flex items-center gap-2">
+            <span>Spot: <b class="text-white font-bold" x-text="symSpot(activeChartSymbol)"></b></span>
+            <span class="text-slate-600">|</span>
+            <span>TF: <b class="text-cyan-300" x-text="(data.trading_state?.timeframe_minutes || 5)+'m'"></b></span>
+            <span class="text-slate-600">|</span>
+            <span class="text-slate-400">Parents: <b class="text-amber-300" x-text="activeParentText()"></b></span>
+          </div>
+
+          <!-- Indicator Toggle Badges -->
+          <div class="flex items-center gap-1.5 bg-[#06171f] p-1 rounded-lg border border-[#133c4a] text-[11px] font-bold">
+            <button type="button" @click="toggleIndicator('lines')"
+                    class="px-2.5 py-1 rounded transition flex items-center gap-1"
+                    :class="showIndicatorLines ? 'bg-cyan-600 text-white shadow':'text-slate-400 hover:text-slate-200'">
+              <span x-text="showIndicatorLines ? '✓' : '○'"></span>
+              <span>Levels (S/R/Zone)</span>
+            </button>
+            <button type="button" @click="toggleIndicator('markers')"
+                    class="px-2.5 py-1 rounded transition flex items-center gap-1"
+                    :class="showIndicatorMarkers ? 'bg-amber-600 text-white shadow':'text-slate-400 hover:text-slate-200'">
+              <span x-text="showIndicatorMarkers ? '✓' : '○'"></span>
+              <span>Signals &amp; Breaks</span>
+            </button>
+          </div>
+
+          <button @click="loadCandles(activeChartSymbol)" title="Refresh Chart & Indicators"
+                  class="bg-[#103442] hover:bg-[#1a4a5d] px-2.5 py-1 rounded text-xs text-slate-300 hover:text-white border border-[#1d4c5e]">
+            ⟳
+          </button>
+        </div>
+      </div>
+
+      <!-- Chart Container -->
+      <div class="p-2 sm:p-4 bg-[#051319] relative">
+        <div x-show="chartLoading && !candlesCount" class="absolute inset-0 flex items-center justify-center bg-[#051319]/75 z-10 text-xs text-slate-400 font-mono">
+          <span class="pulse-dot mr-2 text-cyan-400">●</span> Loading <span class="font-bold text-white ml-1 mr-1" x-text="activeChartSymbol"></span> candles &amp; indicators...
+        </div>
+
+        <!-- Floating MT5-Style Indicator HUD Overlay -->
+        <div class="absolute top-4 left-4 z-10 bg-[#09222c]/90 backdrop-blur-md border border-[#184657] rounded-lg p-3 text-[11px] font-mono shadow-2xl space-y-1 select-none pointer-events-none max-w-[280px]">
+          <div class="flex items-center justify-between border-b border-[#184657] pb-1 font-bold">
+            <span class="text-amber-400 flex items-center gap-1">⚡ <span>Spikebot Indicator</span></span>
+            <span class="text-cyan-300" x-text="activeChartSymbol"></span>
+          </div>
+          <div class="flex items-center justify-between gap-3 pt-0.5">
+            <span class="text-slate-400">Structure:</span>
+            <span class="font-bold" :class="symDirClass(activeChartSymbol)" x-text="symDir(activeChartSymbol)"></span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-slate-400">Latest Break:</span>
+            <span class="font-bold text-slate-200" x-text="symBreak(activeChartSymbol)"></span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-slate-400">Retest Zone:</span>
+            <span class="font-bold" :class="symZoneClass(activeChartSymbol)" x-text="symZoneText(activeChartSymbol)"></span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-slate-400">Support / Resist:</span>
+            <span class="font-bold text-slate-300">
+              <span class="text-emerald-400" x-text="'S ' + symSupport(activeChartSymbol)"></span>
+              <span class="text-slate-600">|</span>
+              <span class="text-rose-400" x-text="'R ' + symResistance(activeChartSymbol)"></span>
             </span>
           </div>
-
-          <div class="space-y-1.5 sm:space-y-2 text-xs">
-            <div class="flex justify-between py-1 border-b border-[#16434f]">
-              <span class="text-slate-400">Current Step:</span>
-              <span class="font-mono font-bold" :class="data.martingale?.candle_paused_max_steps ? 'text-rose-400' : (data.martingale?.current_step > 0 ? 'text-amber-400' : 'text-slate-200')"
-                    x-text="data.martingale?.candle_paused_max_steps ? 'Step 0 / ' + (data.martingale?.max_steps || 5) + ' (Paused)' : ('Step ' + (data.martingale?.current_step || 0) + ' / ' + (data.martingale?.max_steps || 5))"></span>
-            </div>
-            <div class="flex justify-between py-1 border-b border-[#16434f]">
-              <span class="text-slate-400">Multiplier:</span>
-              <span class="font-mono text-slate-200" x-text="(data.martingale?.multiplier || 2.0) + 'x'"></span>
-            </div>
-            <div class="flex justify-between py-1 border-b border-[#16434f]">
-              <span class="text-slate-400">Streak:</span>
-              <span class="font-mono font-bold"
-                    :class="(data.martingale?.loss_streak || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'"
-                    x-text="(data.martingale?.loss_streak || 0) > 0 ? (data.martingale.loss_streak + ' Losses') : ((data.martingale?.win_streak || 0) + ' Wins')"></span>
-            </div>
-            <div x-show="data.martingale?.candle_paused_max_steps" class="p-1.5 rounded bg-rose-950/60 border border-rose-800 text-[11px] text-rose-300 text-center font-mono">
-              Max steps hit • Reset to Base • Paused until next <span x-text="(data.strategy_status?.timeframe_minutes || 5) + 'm'"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-3 pt-2.5 border-t border-[#16434f] flex justify-between items-center">
-          <span class="text-xs text-slate-400">Next Stake:</span>
-          <span class="text-sm sm:text-base font-bold font-mono text-cyan-300"
-                x-text="data.martingale?.next_stake != null ? '$' + Number(data.martingale.next_stake).toFixed(2) : '$1.00'"></span>
-        </div>
-      </div>
-
-      <!-- Target Profit & Risk Card -->
-      <div class="bg-[#0c2a33] p-3.5 sm:p-5 rounded-xl border border-[#1a4d5a] shadow flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-center mb-2.5">
-            <h3 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <span>Target & Risk</span>
-              <span class="w-2 h-2 rounded-full" :class="data.risk?.target_profit_enabled ? 'bg-emerald-400' : 'bg-slate-600'"></span>
-            </h3>
-            <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase"
-                  :class="data.risk?.target_profit_enabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-slate-800 text-slate-400'">
-              <span x-text="data.risk?.target_profit_enabled ? ((data.risk?.is_candle_scope || data.risk?.target_profit_scope === 'candle_window' || data.risk?.target_profit_scope === '5m_window') ? ((data.strategy_status?.timeframe_minutes || 5) + 'M') : 'SESSION') : 'OFF'"></span>
-            </span>
-          </div>
-
-          <div class="space-y-1.5 sm:space-y-2 text-xs">
-            <div class="flex justify-between py-1 border-b border-[#16434f]">
-              <span class="text-slate-400">Scope:</span>
-              <span class="font-mono font-bold text-slate-200"
-                    x-text="(data.risk?.is_candle_scope || data.risk?.target_profit_scope === 'candle_window' || data.risk?.target_profit_scope === '5m_window') ? ((data.strategy_status?.timeframe_minutes || 5) + 'm Window') : 'Session'"></span>
-            </div>
-            <div class="flex justify-between py-1 border-b border-[#16434f]">
-              <span class="text-slate-400">Target Goal:</span>
-              <span class="font-mono font-bold text-emerald-400"
-                    x-text="data.risk?.target_profit_enabled ? (data.risk?.target_profit_display || '$' + Number(data.risk?.target_profit_amount).toFixed(2)) : 'Disabled'"></span>
-            </div>
-            <div class="flex justify-between py-1 border-b border-[#16434f]" x-show="data.risk?.stop_loss_enabled">
-              <span class="text-slate-400">Stop Loss:</span>
-              <span class="font-mono font-bold text-rose-400"
-                    x-text="data.risk?.stop_loss_display || '$' + Number(data.risk?.stop_loss_amount).toFixed(2)"></span>
-            </div>
-            <div class="flex justify-between py-1 border-b border-[#16434f]">
-              <span class="text-slate-400" x-text="(data.strategy_status?.timeframe_minutes || 5) + 'm Candle P/L:'">5m Candle P/L:</span>
-              <span class="font-mono font-bold"
-                    :class="(data.risk?.candle_profit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'"
-                    x-text="'$' + Number(data.risk?.candle_profit || 0).toFixed(2)"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-3 pt-2.5 border-t border-[#16434f] flex justify-between items-center">
-          <span class="text-xs text-slate-400">Session Net:</span>
-          <span class="text-sm sm:text-base font-bold font-mono"
-                :class="(data.risk?.session_profit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'"
-                x-text="((data.risk?.session_profit || 0) >= 0 ? '+$' : '-$') + Math.abs(data.risk?.session_profit || 0).toFixed(2)"></span>
-        </div>
-      </div>
-
-      <!-- Performance Stats Card -->
-      <div class="bg-[#0c2a33] p-3.5 sm:p-5 rounded-xl border border-[#1a4d5a] shadow flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-center mb-2.5">
-            <h3 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300">Session Stats</h3>
-            <button @click="resetStats()" class="text-[10px] text-cyan-400 hover:text-cyan-300 underline font-semibold">Reset Stats</button>
-          </div>
-
-          <div class="grid grid-cols-3 gap-1.5 sm:gap-2 text-center py-2 bg-[#082027] rounded-lg border border-[#16434f]">
-            <div>
-              <div class="text-[9px] sm:text-[10px] text-slate-400 uppercase font-semibold">Wins</div>
-              <div class="text-base sm:text-lg font-black font-mono text-emerald-400" x-text="data.risk?.total_wins || 0">0</div>
-            </div>
-            <div>
-              <div class="text-[9px] sm:text-[10px] text-slate-400 uppercase font-semibold">Losses</div>
-              <div class="text-base sm:text-lg font-black font-mono text-rose-500" x-text="data.risk?.total_losses || 0">0</div>
-            </div>
-            <div>
-              <div class="text-[9px] sm:text-[10px] text-slate-400 uppercase font-semibold">Win Rate</div>
-              <div class="text-base sm:text-lg font-black font-mono text-cyan-300" x-text="(data.risk?.win_rate || 0) + '%'">0%</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-3 pt-2.5 border-t border-[#16434f] flex justify-between items-center text-xs text-slate-400">
-          <span>Trades: <b class="text-white font-mono" x-text="data.risk?.total_trades || 0">0</b></span>
-          <span>In <span x-text="(data.strategy_status?.timeframe_minutes || 5) + 'm: '">5m: </span><b class="text-cyan-400 font-mono" x-text="data.risk?.candle_trades_count || 0">0</b></span>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Unified Operations Card (Tabs: Active Contracts | Settled History | Live Activity Logs) -->
-    <div class="bg-[#0c2a33] rounded-xl border border-[#1a4d5a] shadow overflow-hidden">
-      <!-- Tabs Navigation Bar -->
-      <div class="flex items-center justify-between border-b border-[#1a4d5a] bg-[#09222a] px-1.5 sm:px-2 pt-1 sm:pt-2 overflow-x-auto">
-        <div class="flex gap-1">
-          <button @click="tab = 'active'"
-                  :class="tab === 'active' ? 'bg-[#0c2a33] text-cyan-300 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-white'"
-                  class="px-2.5 sm:px-4 py-2 sm:py-3 font-bold uppercase text-[11px] sm:text-xs tracking-wider transition flex items-center gap-1.5 rounded-t-lg flex-shrink-0">
-            <span><span class="sm:hidden">Active</span><span class="hidden sm:inline">Active Contracts</span></span>
-            <span class="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-mono font-bold"
-                  :class="tab === 'active' ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' : 'bg-slate-800 text-slate-400'"
-                  x-text="data.trading_state?.active_trades?.length || 0">0</span>
-          </button>
-
-          <button @click="tab = 'history'"
-                  :class="tab === 'history' ? 'bg-[#0c2a33] text-cyan-300 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-white'"
-                  class="px-2.5 sm:px-4 py-2 sm:py-3 font-bold uppercase text-[11px] sm:text-xs tracking-wider transition flex items-center gap-1.5 rounded-t-lg flex-shrink-0">
-            <span><span class="sm:hidden">History</span><span class="hidden sm:inline">Settled History</span></span>
-            <span class="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-mono font-bold"
-                  :class="tab === 'history' ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' : 'bg-slate-800 text-slate-400'"
-                  x-text="history.length">0</span>
-          </button>
-
-          <button @click="tab = 'logs'"
-                  :class="tab === 'logs' ? 'bg-[#0c2a33] text-cyan-300 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-white'"
-                  class="px-2.5 sm:px-4 py-2 sm:py-3 font-bold uppercase text-[11px] sm:text-xs tracking-wider transition flex items-center gap-1.5 rounded-t-lg flex-shrink-0">
-            <span><span class="sm:hidden">Logs</span><span class="hidden sm:inline">Live Activity Logs</span></span>
-            <span class="w-1.5 h-1.5 rounded-full" :class="logs.length ? 'bg-emerald-400 pulse-dot' : 'bg-slate-600'"></span>
-          </button>
-        </div>
-
-        <div class="px-2 py-1 text-xs text-slate-400 flex items-center gap-2 flex-shrink-0">
-          <button x-show="tab === 'history'" @click="loadHistory()" class="text-cyan-400 hover:text-cyan-300 font-semibold underline text-[11px] sm:text-xs">
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <!-- Tab 1: Active Contracts -->
-      <div x-show="tab === 'active'">
-        <!-- Mobile Card View (sm:hidden) -->
-        <div class="sm:hidden p-2.5 space-y-2">
-          <template x-for="t in (data.trading_state?.active_trades || [])" :key="t.contract_id">
-            <div class="p-3 bg-[#082027] rounded-xl border border-[#16434f] space-y-2 text-xs font-mono">
-              <div class="flex justify-between items-center">
-                <span class="text-cyan-300 font-bold" x-text="'#' + t.contract_id"></span>
-                <span class="px-2 py-0.5 rounded font-bold uppercase text-[10px]"
-                      :class="t.contract_type === 'CALL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'"
-                      x-text="t.contract_type === 'CALL' ? 'RISE (CALL)' : 'FALL (PUT)'"></span>
-                <span class="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[9px] animate-pulse">RUNNING</span>
-              </div>
-              <div class="grid grid-cols-2 gap-2 pt-1 border-t border-[#123640] text-slate-300">
-                <div>Entry: <span class="text-white font-bold" x-text="formatDec(t.entry_spot)"></span></div>
-                <div>Live Spot: <span class="text-cyan-300 font-bold" x-text="formatDec(t.current_spot || data.prices?.spot)"></span></div>
-                <div>Stake: <span class="text-white" x-text="'$' + Number(t.stake).toFixed(2)"></span></div>
-                <div>Live P/L: <span class="font-bold"
-                                    :class="(t.live_pl || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'"
-                                    x-text="t.live_pl != null ? ((t.live_pl >= 0 ? '+$' : '-$') + Math.abs(t.live_pl).toFixed(2)) : '---'"></span></div>
-              </div>
+          <template x-if="symStop(activeChartSymbol) > 0">
+            <div class="flex items-center justify-between gap-3 border-t border-[#184657]/70 pt-1 text-[10px]">
+              <span class="text-slate-400">Stop / Target:</span>
+              <span class="font-bold">
+                <span class="text-rose-400" x-text="symStop(activeChartSymbol).toFixed(2)"></span>
+                <span class="text-slate-600">/</span>
+                <span class="text-cyan-400" x-text="symTarget(activeChartSymbol).toFixed(2)"></span>
+              </span>
             </div>
           </template>
-          <div x-show="!data.trading_state?.active_trades?.length" class="p-6 text-center text-slate-500 font-sans text-xs italic">
-            No active contracts. Trades will appear here automatically.
-          </div>
         </div>
 
-        <!-- Desktop Table View (hidden sm:block) -->
-        <div class="hidden sm:block overflow-x-auto">
-          <table class="w-full text-left text-xs font-mono">
-            <thead class="bg-[#06171d] text-slate-400 uppercase border-b border-[#1a4d5a]">
-              <tr>
-                <th class="p-3">Contract ID</th>
-                <th class="p-3">Type</th>
-                <th class="p-3">Entry Spot</th>
-                <th class="p-3">Current Spot</th>
-                <th class="p-3">Stake</th>
-                <th class="p-3">Payout</th>
-                <th class="p-3">Live P/L</th>
-                <th class="p-3">Status</th>
+        <div id="tv-chart" class="w-full h-80 sm:h-96 rounded-lg overflow-hidden"></div>
+      </div>
+    </div>
+
+    <!-- Active Trades & Positions Table with Close Action -->
+    <div class="bg-[#09222c] rounded-xl border border-[#133c4a] overflow-hidden">
+      <div class="flex justify-between items-center bg-[#0d2a37] px-4 py-3 border-b border-[#133c4a]">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Open Multiplier Positions</h3>
+          <span class="bg-cyan-900/60 text-cyan-300 text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+                x-text="data.trading_state?.active_trades?.length || 0"></span>
+        </div>
+        <span class="text-[11px] text-slate-400">Live positions updated every second</span>
+      </div>
+
+      <div class="p-4 overflow-x-auto">
+        <table class="w-full text-left text-xs sm:text-sm min-w-[750px]">
+          <thead>
+            <tr class="text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#133c4a]">
+              <th class="py-2.5 px-3">Symbol</th>
+              <th class="py-2.5 px-3">Contract</th>
+              <th class="py-2.5 px-3">Leverage</th>
+              <th class="py-2.5 px-3">Stake</th>
+              <th class="py-2.5 px-3">Entry Spot</th>
+              <th class="py-2.5 px-3">Current Spot</th>
+              <th class="py-2.5 px-3">Structural SL</th>
+              <th class="py-2.5 px-3">Structural TP</th>
+              <th class="py-2.5 px-3">Live P/L ($ & %)</th>
+              <th class="py-2.5 px-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="t in (data.trading_state?.active_trades || [])" :key="t.contract_id">
+              <tr class="border-b border-[#133c4a]/60 hover:bg-[#0d2e3b]/40">
+                <td class="py-3 px-3 font-bold text-white flex items-center gap-1.5">
+                  <span x-text="t.symbol==='BOOM1000'?'🚀':'📉'"></span>
+                  <span x-text="t.symbol"></span>
+                </td>
+                <td class="py-3 px-3 font-bold" :class="t.contract_type==='MULTUP'?'text-emerald-400':'text-rose-400'"
+                    x-text="t.contract_type==='MULTUP'?'MULTUP ↗':'MULTDOWN ↘'"></td>
+                <td class="py-3 px-3 font-mono font-bold text-amber-300" x-text="(t.multiplier || data.trading_state?.multiplier)+'x'"></td>
+                <td class="py-3 px-3 font-mono" x-text="'$'+Number(t.stake).toFixed(2)"></td>
+                <td class="py-3 px-3 font-mono text-slate-300" x-text="t.entry_spot != null ? Number(t.entry_spot).toFixed(3) : '—'"></td>
+                <td class="py-3 px-3 font-mono text-slate-300" x-text="t.current_spot != null ? Number(t.current_spot).toFixed(3) : '—'"></td>
+                <td class="py-3 px-3 font-mono font-bold text-rose-400" x-text="t.structural_stop != null ? Number(t.structural_stop).toFixed(3) : '—'"></td>
+                <td class="py-3 px-3 font-mono font-bold text-cyan-400" x-text="t.structural_target != null ? Number(t.structural_target).toFixed(3) : '—'"></td>
+                <td class="py-3 px-3 font-mono font-bold" :class="t.live_pl > 0 ? 'text-emerald-400' : (t.live_pl < 0 ? 'text-rose-400' : 'text-slate-300')">
+                  <span x-text="t.live_pl != null ? ((t.live_pl > 0 ? '+' : '') + '$' + Number(t.live_pl).toFixed(2)) : '$0.00'"></span>
+                  <span class="text-[10px] font-normal" x-show="t.live_return_pct != null" x-text="' (' + (t.live_return_pct > 0 ? '+' : '') + Number(t.live_return_pct).toFixed(1) + '%)'"></span>
+                </td>
+                <td class="py-3 px-3 text-right">
+                  <button @click="closeTrade(t.contract_id)"
+                          class="bg-rose-700/80 hover:bg-rose-600 text-white font-bold px-3 py-1 rounded text-xs transition">
+                    ✕ Close
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="!(data.trading_state?.active_trades || []).length">
+              <td colspan="10" class="py-8 text-center text-slate-500 italic text-xs">
+                No active multiplier positions currently open.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- History & Logs Tabs -->
+    <div class="bg-[#09222c] rounded-xl border border-[#133c4a] overflow-hidden">
+      <div class="flex bg-[#0d2a37] border-b border-[#133c4a]">
+        <button @click="tab='history'" :class="tab==='history'?'bg-[#09222c] text-cyan-300 border-b-2 border-cyan-400':'text-slate-400'"
+                class="px-5 py-3 font-bold uppercase text-xs transition">Trade History</button>
+        <button @click="tab='logs'" :class="tab==='logs'?'bg-[#09222c] text-cyan-300 border-b-2 border-cyan-400':'text-slate-400'"
+                class="px-5 py-3 font-bold uppercase text-xs transition">Activity Logs</button>
+      </div>
+
+      <div class="p-4">
+        <!-- History Tab -->
+        <div x-show="tab==='history'" class="overflow-x-auto">
+          <table class="w-full text-left text-xs sm:text-sm min-w-[550px]">
+            <thead>
+              <tr class="text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#133c4a]">
+                <th class="py-2 px-3">Symbol</th>
+                <th class="py-2 px-3">Type</th>
+                <th class="py-2 px-3">Leverage</th>
+                <th class="py-2 px-3">Stake</th>
+                <th class="py-2 px-3">Net Profit / Loss</th>
+                <th class="py-2 px-3 text-right">Closed Time</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-[#16434f]">
-              <template x-for="t in (data.trading_state?.active_trades || [])" :key="t.contract_id">
-                <tr class="hover:bg-[#103844] transition">
-                  <td class="p-3 text-cyan-300 font-bold" x-text="t.contract_id"></td>
-                  <td class="p-3">
-                    <span class="px-2 py-0.5 rounded font-bold uppercase text-[10px]"
-                          :class="t.contract_type === 'CALL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'"
-                          x-text="t.contract_type === 'CALL' ? 'RISE (CALL)' : 'FALL (PUT)'"></span>
-                  </td>
-                  <td class="p-3 text-slate-200" x-text="formatDec(t.entry_spot)"></td>
-                  <td class="p-3 text-cyan-300 font-bold" x-text="formatDec(t.current_spot || data.prices?.spot)"></td>
-                  <td class="p-3 text-slate-200" x-text="'$' + Number(t.stake).toFixed(2)"></td>
-                  <td class="p-3 text-emerald-400 font-bold" x-text="'$' + Number(t.payout).toFixed(2)"></td>
-                  <td class="p-3 font-bold"
-                      :class="(t.live_pl || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'"
-                      x-text="t.live_pl != null ? ((t.live_pl >= 0 ? '+$' : '-$') + Math.abs(t.live_pl).toFixed(2)) : '---'"></td>
-                  <td class="p-3">
-                    <span class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] animate-pulse">RUNNING</span>
-                  </td>
+            <tbody>
+              <template x-for="t in tradeHistory" :key="t.contract_id || t.entry_time">
+                <tr class="border-b border-[#133c4a]/50">
+                  <td class="py-2.5 px-3 font-bold text-white" x-text="t.symbol"></td>
+                  <td class="py-2.5 px-3 font-bold" :class="t.contract_type==='MULTUP'?'text-emerald-400':'text-rose-400'"
+                      x-text="t.contract_type"></td>
+                  <td class="py-2.5 px-3 font-mono font-bold text-amber-300" x-text="(t.multiplier || 100)+'x'"></td>
+                  <td class="py-2.5 px-3 font-mono" x-text="'$'+Number(t.stake).toFixed(2)"></td>
+                  <td class="py-2.5 px-3 font-bold font-mono" :class="t.profit_loss > 0 ? 'text-emerald-400':'text-rose-400'"
+                      x-text="(t.profit_loss > 0 ? '+' : '') + '$' + Number(t.profit_loss).toFixed(2)"></td>
+                  <td class="py-2.5 px-3 text-right text-slate-400 font-mono text-xs"
+                      x-text="t.exit_time ? new Date(t.exit_time).toLocaleTimeString() : '—'"></td>
                 </tr>
               </template>
-              <tr x-show="!data.trading_state?.active_trades?.length">
-                <td colspan="8" class="p-6 text-center text-slate-500 font-sans text-xs italic">
-                  No active contracts. When a trade fires within the 3m window, it will appear here.
-                </td>
+              <tr x-show="!tradeHistory.length">
+                <td colspan="6" class="py-6 text-center text-slate-500 italic text-xs">No closed trades yet in this session.</td>
               </tr>
             </tbody>
           </table>
         </div>
-      </div>
 
-      <!-- Tab 2: Settled Trade History -->
-      <div x-show="tab === 'history'">
-        <!-- Mobile Card View (sm:hidden) -->
-        <div class="sm:hidden p-2.5 space-y-2 max-h-96 overflow-y-auto">
-          <template x-for="h in history.slice(0, 30)" :key="h.contract_id + (h.exit_time || '')">
-            <div class="p-3 bg-[#082027] rounded-xl border border-[#16434f] space-y-1.5 text-xs font-mono">
-              <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                  <span class="text-slate-400 text-[11px]" x-text="formatTime(h.exit_time || h.entry_time)"></span>
-                  <span class="px-1.5 py-0.5 rounded font-bold uppercase text-[9px]"
-                        :class="h.contract_type === 'CALL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'"
-                        x-text="h.contract_type === 'CALL' ? 'RISE' : 'FALL'"></span>
-                </div>
-                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider"
-                      :class="h.status === 'WON' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'"
-                      x-text="h.status"></span>
-              </div>
-              <div class="flex justify-between items-center pt-1 border-t border-[#123640] text-slate-300">
-                <div class="text-[11px]">
-                  <span>Spot: </span>
-                  <span class="text-white" x-text="formatDec(h.entry_spot)"></span>
-                  <span> → </span>
-                  <span class="text-white" x-text="formatDec(h.exit_tick)"></span>
-                </div>
-                <div class="text-right">
-                  <span class="text-slate-400" x-text="'$' + Number(h.stake).toFixed(2) + ' • '"></span>
-                  <span class="font-bold text-sm"
-                        :class="(h.profit_loss || 0) > 0 ? 'text-emerald-400' : 'text-rose-500'"
-                        x-text="((h.profit_loss || 0) >= 0 ? '+$' : '-$') + Math.abs(h.profit_loss || 0).toFixed(2)"></span>
-                </div>
-              </div>
-            </div>
-          </template>
-          <div x-show="!history.length" class="p-6 text-center text-slate-500 font-sans text-xs italic">
-            No trades executed yet. Press Start to initiate automated trading.
+        <!-- Logs Tab -->
+        <div x-show="tab==='logs'">
+          <div class="bg-black/80 rounded-lg p-3 h-64 overflow-y-auto font-mono text-[11px] border border-[#133c4a] text-slate-300 space-y-1">
+            <template x-for="l in logs" :key="l">
+              <div class="border-b border-slate-900 pb-0.5"
+                   :class="l.includes('WIN') || l.includes('SETUP') ? 'text-emerald-400' : (l.includes('LOSS') || l.includes('failed') ? 'text-rose-400' : 'text-slate-300')"
+                   x-text="l"></div>
+            </template>
+            <div x-show="!logs.length" class="text-slate-600 italic">Listening for activity...</div>
           </div>
         </div>
-
-        <!-- Desktop Table View (hidden sm:block) -->
-        <div class="hidden sm:block overflow-x-auto max-h-80">
-          <table class="w-full text-left text-xs font-mono">
-            <thead class="bg-[#06171d] text-slate-400 uppercase sticky top-0 border-b border-[#1a4d5a]">
-              <tr>
-                <th class="p-3">Time</th>
-                <th class="p-3">Type</th>
-                <th class="p-3">Entry Spot</th>
-                <th class="p-3">Exit Spot</th>
-                <th class="p-3">Stake</th>
-                <th class="p-3">Result P/L</th>
-                <th class="p-3">Outcome</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-[#16434f]">
-              <template x-for="h in history.slice(0, 40)" :key="h.contract_id + (h.exit_time || '')">
-                <tr class="hover:bg-[#103844] transition">
-                  <td class="p-3 text-slate-400" x-text="formatTime(h.exit_time || h.entry_time)"></td>
-                  <td class="p-3">
-                    <span class="px-2 py-0.5 rounded font-bold uppercase text-[10px]"
-                          :class="h.contract_type === 'CALL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'"
-                          x-text="h.contract_type === 'CALL' ? 'RISE' : 'FALL'"></span>
-                  </td>
-                  <td class="p-3 text-slate-300" x-text="formatDec(h.entry_spot)"></td>
-                  <td class="p-3 text-slate-300" x-text="formatDec(h.exit_tick)"></td>
-                  <td class="p-3 text-slate-300" x-text="'$' + Number(h.stake).toFixed(2)"></td>
-                  <td class="p-3 font-bold"
-                      :class="(h.profit_loss || 0) > 0 ? 'text-emerald-400' : 'text-rose-500'"
-                      x-text="((h.profit_loss || 0) >= 0 ? '+$' : '-$') + Math.abs(h.profit_loss || 0).toFixed(2)"></td>
-                  <td class="p-3">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider"
-                          :class="h.status === 'WON' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'"
-                          x-text="h.status"></span>
-                  </td>
-                </tr>
-              </template>
-              <tr x-show="!history.length">
-                <td colspan="7" class="p-6 text-center text-slate-500 font-sans text-xs italic">
-                  No trades executed yet. Press Start to initiate automated trading.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Tab 3: Live Activity Logs Console -->
-      <div x-show="tab === 'logs'" class="p-3 sm:p-4 bg-[#06171d]">
-        <div class="font-mono text-xs text-slate-300 h-56 sm:h-64 overflow-y-auto space-y-1 break-words" id="log-box">
-          <template x-for="(l, idx) in logs" :key="idx">
-            <div class="leading-relaxed hover:text-white"
-                 :class="l.includes('WIN') ? 'text-emerald-400 font-bold' : (l.includes('LOSS') ? 'text-rose-400 font-bold' : (l.includes('ENTERED') ? 'text-cyan-300' : ''))"
-                 x-text="l"></div>
-          </template>
-          <div x-show="!logs.length" class="text-slate-600 italic">Waiting for activity logs...</div>
-        </div>
       </div>
     </div>
 
-  </div>
-
-  <!-- Mobile Floating Quick-Action Bar (Fixed at bottom for thumb-reach on mobile phones) -->
-  <div class="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#06171d]/95 backdrop-blur-md border-t border-[#1a4d5a] p-2.5 px-3.5 flex items-center justify-between shadow-2xl">
-    <!-- Mini Signal Indicator -->
-    <div class="flex items-center gap-2">
-      <span class="w-2.5 h-2.5 rounded-full"
-            :class="data.signal?.direction === 'CALL' ? 'bg-emerald-400 pulse-dot' : (data.signal?.direction === 'PUT' ? 'bg-rose-500 pulse-dot' : 'bg-slate-500')"></span>
-      <div>
-        <div class="text-[10px] text-slate-400 uppercase font-semibold leading-none">Signal</div>
-        <div class="text-xs font-bold font-mono"
-             :class="data.signal?.direction === 'CALL' ? 'text-emerald-400' : (data.signal?.direction === 'PUT' ? 'text-rose-400' : 'text-slate-300')"
-             x-text="data.signal?.direction ? (data.signal.direction === 'CALL' ? 'RISE ↑' : 'FALL ↓') : 'WAIT'"></div>
-      </div>
-    </div>
-
-    <!-- Mini Balance -->
-    <div class="text-center">
-      <div class="text-[9px] text-slate-400 uppercase font-semibold leading-none">Balance</div>
-      <div class="text-xs font-bold font-mono text-emerald-400"
-           x-text="formatCurrency(data.trading_state?.balance, data.trading_state?.currency)">$0.00</div>
-    </div>
-
-    <!-- Start / Stop Button -->
-    <button @click="running ? stopBot() : startBot()" :disabled="botBusy"
-            class="px-4 py-2 rounded-lg font-black uppercase text-xs tracking-wider transition shadow flex items-center gap-1.5 disabled:opacity-50"
-            :class="running ? 'bg-rose-600 text-white' : 'bg-emerald-500 text-slate-950'">
-      <span x-show="!botBusy && !running">▶ Start</span>
-      <span x-show="!botBusy && running">■ Stop</span>
-      <span x-show="botBusy">...</span>
-    </button>
   </div>
 
   <script>
-    function app() {
+    function spikebotApp() {
       return {
-        tab: 'active',
         data: {},
         logs: [],
-        history: [],
+        tradeHistory: [],
+        tab: 'history',
         running: false,
         botBusy: false,
+        suppress: 0,
+        activeChartSymbol: 'BOOM1000',
+        chart: null,
+        candlestickSeries: null,
+        showIndicatorLines: true,
+        showIndicatorMarkers: true,
+        priceLines: [],
+        markersPrimitive: null,
+        currentMarkers: [],
+
+        chartLoading: false,
+        candlesLoaded: false,
+        candlesCount: 0,
         ws: null,
         wsConnected: false,
-        reconnectTimer: null,
-        reconnectDelay: 1500,
 
-        init() {
-          this.connectWS();
-          this.startFallbackPolling();
-          // Heartbeat keepalive every 20s to keep cloud proxy WebSocket alive
-          setInterval(() => {
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-              try { this.ws.send("ping"); } catch (e) {}
-            }
-          }, 20000);
+        async init() {
+          this.$nextTick(() => {
+            this.initChart();
+          });
+          this.connectWs();
+          await this.refresh();
         },
 
-        applySnapshot(payload) {
-          if (!payload) return;
-          this.data = payload;
-          if (payload.trading_state) {
-            this.running = !!payload.trading_state.running;
+        connectWs() {
+          if (this.ws) {
+            try { this.ws.close(); } catch (e) {}
           }
-          if (payload.logs) {
-            this.logs = payload.logs;
-          }
-          if (payload.history) {
-            this.history = payload.history;
-          }
-        },
+          const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const wsUrl = `${protocol}//${location.host}/ws`;
+          const ws = new WebSocket(wsUrl);
+          this.ws = ws;
 
-        connectWS() {
-          if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-            return;
-          }
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          const wsUrl = `${protocol}//${window.location.host}/ws`;
-          try {
-            this.ws = new WebSocket(wsUrl);
-          } catch (e) {
-            this.scheduleReconnect();
-            return;
-          }
-
-          this.ws.onopen = () => {
+          ws.onopen = () => {
             this.wsConnected = true;
-            this.reconnectDelay = 1500;
           };
 
-          this.ws.onmessage = (event) => {
+          ws.onmessage = (event) => {
             try {
-              const payload = JSON.parse(event.data);
-              if (payload.type === 'pong') return;
-              this.applySnapshot(payload);
+              const msg = JSON.parse(event.data);
+              if (msg.type === 'snapshot' || msg.type === 'update') {
+                if (msg.data) {
+                  this.data = msg.data;
+                  if (!this.botBusy && Date.now() > this.suppress && this.data.trading_state?.running != null) {
+                    this.running = !!this.data.trading_state.running;
+                  }
+                }
+                if (msg.trade_history && Array.isArray(msg.trade_history)) {
+                  this.tradeHistory = [...msg.trade_history].reverse();
+                }
+                if (msg.logs && Array.isArray(msg.logs)) {
+                  this.logs = [...msg.logs].reverse();
+                }
+                this.updateChartRealtime();
+                this.updateChartIndicators();
+                const liveMarkers = this.data.symbols?.[this.activeChartSymbol]?.analysis?.markers;
+                if (Array.isArray(liveMarkers) && liveMarkers.length) {
+                  this.applyMarkers(liveMarkers);
+                }
+              } else if (msg.type === 'log') {
+                if (msg.line) {
+                  this.logs.unshift(msg.line);
+                  if (this.logs.length > 150) this.logs.pop();
+                }
+              }
             } catch (e) {
-              console.error("WS parse error:", e);
+              console.error('WS parse error:', e);
             }
           };
 
-          this.ws.onclose = () => {
+          ws.onclose = () => {
             this.wsConnected = false;
-            this.scheduleReconnect();
+            setTimeout(() => this.connectWs(), 2000);
           };
 
-          this.ws.onerror = () => {
-            this.wsConnected = false;
+          ws.onerror = (err) => {
+            console.warn('WS error:', err);
+            try { ws.close(); } catch (e) {}
           };
         },
 
-        scheduleReconnect() {
-          if (this.reconnectTimer) return;
-          const delay = this.reconnectDelay || 2000;
-          this.reconnectTimer = setTimeout(() => {
-            this.reconnectTimer = null;
-            this.reconnectDelay = Math.min((this.reconnectDelay || 2000) * 1.5, 6000);
-            this.connectWS();
-          }, delay);
+        async refresh() {
+          try {
+            const res = await fetch('/api/latest');
+            this.data = await res.json();
+            if (!this.botBusy && Date.now() > this.suppress && this.data.trading_state?.running != null) {
+              this.running = !!this.data.trading_state.running;
+            }
+            if (this.tab === 'history') {
+              const hres = await fetch('/history');
+              this.tradeHistory = (await hres.json()).reverse();
+            }
+            this.updateChartRealtime();
+            this.updateChartIndicators();
+            const liveMarkers = this.data.symbols?.[this.activeChartSymbol]?.analysis?.markers;
+            if (Array.isArray(liveMarkers) && liveMarkers.length) {
+              this.applyMarkers(liveMarkers);
+            }
+          } catch (e) {}
         },
 
-        startFallbackPolling() {
-          // Poll /api/latest if WebSocket is disconnected or awaiting connection
-          setInterval(async () => {
-            if (!this.wsConnected) {
-              try {
-                const res = await fetch('/api/latest');
-                if (res.ok) {
-                  const payload = await res.json();
-                  this.applySnapshot(payload);
+        async refreshLogs() {
+          if (this.tab !== 'logs') return;
+          try {
+            const res = await fetch('/api/logs');
+            this.logs = (await res.json()).reverse();
+          } catch (e) {}
+        },
+
+        initChart() {
+          const container = document.getElementById('tv-chart');
+          if (!container) return;
+          if (typeof LightweightCharts === 'undefined') {
+            setTimeout(() => this.initChart(), 300);
+            return;
+          }
+          if (this.chart) return;
+
+          container.innerHTML = '';
+          const w = container.clientWidth || 800;
+          const h = container.clientHeight || 384;
+
+          this.chart = LightweightCharts.createChart(container, {
+            width: w,
+            height: h,
+            layout: {
+              background: { color: '#051319' },
+              textColor: '#94a3b8',
+            },
+            grid: {
+              vertLines: { color: '#0d2a37' },
+              horzLines: { color: '#0d2a37' },
+            },
+            crosshair: {
+              mode: LightweightCharts.CrosshairMode ? LightweightCharts.CrosshairMode.Normal : 1,
+            },
+            timeScale: {
+              timeVisible: true,
+              secondsVisible: false,
+              borderColor: '#133c4a',
+            },
+            rightPriceScale: {
+              borderColor: '#133c4a',
+            },
+          });
+
+          const seriesOpts = {
+            upColor: '#10b981',
+            downColor: '#f43f5e',
+            borderUpColor: '#10b981',
+            borderDownColor: '#f43f5e',
+            wickUpColor: '#10b981',
+            wickDownColor: '#f43f5e',
+          };
+
+          if (typeof this.chart.addSeries === 'function' && LightweightCharts.CandlestickSeries) {
+            this.candlestickSeries = this.chart.addSeries(LightweightCharts.CandlestickSeries, seriesOpts);
+          } else if (typeof this.chart.addCandlestickSeries === 'function') {
+            this.candlestickSeries = this.chart.addCandlestickSeries(seriesOpts);
+          }
+
+          if (window.ResizeObserver) {
+            const ro = new ResizeObserver(entries => {
+              for (const entry of entries) {
+                const cr = entry.contentRect;
+                if (cr.width > 0 && cr.height > 0 && this.chart) {
+                  this.chart.applyOptions({ width: Math.floor(cr.width), height: Math.floor(cr.height) });
                 }
+              }
+            });
+            ro.observe(container);
+          } else {
+            window.addEventListener('resize', () => {
+              if (this.chart && container) {
+                this.chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+              }
+            });
+          }
+
+          this.loadCandles(this.activeChartSymbol);
+        },
+
+        async switchChart(symbol) {
+          if (this.activeChartSymbol === symbol && this.candlesLoaded) return;
+          this.activeChartSymbol = symbol;
+          this.candlesLoaded = false;
+          this.currentMarkers = [];
+
+          // Immediately remove old price lines so scale adjusts cleanly to new asset price range
+          if (this.priceLines && this.priceLines.length) {
+            for (const pl of this.priceLines) {
+              try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
+            }
+          }
+          this.priceLines = [];
+
+          // Immediately clear markers
+          try {
+            if (this.markersPrimitive && typeof this.markersPrimitive.setMarkers === 'function') {
+              this.markersPrimitive.setMarkers([]);
+            }
+            if (typeof this.candlestickSeries.setMarkers === 'function') {
+              this.candlestickSeries.setMarkers([]);
+            }
+          } catch (e) {}
+
+          await this.loadCandles(symbol);
+        },
+
+        toggleIndicator(type) {
+          if (type === 'lines') {
+            this.showIndicatorLines = !this.showIndicatorLines;
+            this.updateChartIndicators();
+          } else if (type === 'markers') {
+            this.showIndicatorMarkers = !this.showIndicatorMarkers;
+            this.applyMarkers(this.currentMarkers);
+          }
+        },
+
+        updateChartIndicators(explicitLevels = null) {
+          if (!this.candlestickSeries) return;
+          // Clear previous price lines
+          if (this.priceLines && this.priceLines.length) {
+            for (const pl of this.priceLines) {
+              try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
+            }
+          }
+          this.priceLines = [];
+          if (!this.showIndicatorLines) return;
+
+          const a = explicitLevels || this.data.symbols?.[this.activeChartSymbol]?.analysis;
+          if (!a) return;
+          const LS = (typeof LightweightCharts !== 'undefined' && LightweightCharts.LineStyle)
+            ? LightweightCharts.LineStyle
+            : { Solid: 0, Dotted: 1, Dashed: 2 };
+
+          // 1. Support Line (Emerald Green)
+          if (a.support && Number(a.support) > 0) {
+            try {
+              this.priceLines.push(this.candlestickSeries.createPriceLine({
+                price: Number(a.support),
+                color: '#10b981',
+                lineWidth: 2,
+                lineStyle: LS.Solid,
+                axisLabelVisible: true,
+                title: 'SUPPORT'
+              }));
+            } catch (e) {}
+          }
+
+          // 2. Resistance Line (Rose Red)
+          if (a.resistance && Number(a.resistance) > 0) {
+            try {
+              this.priceLines.push(this.candlestickSeries.createPriceLine({
+                price: Number(a.resistance),
+                color: '#f43f5e',
+                lineWidth: 2,
+                lineStyle: LS.Solid,
+                axisLabelVisible: true,
+                title: 'RESISTANCE'
+              }));
+            } catch (e) {}
+          }
+
+          // 3. Retest Zone Mid / Entry (Yellow)
+          if (a.zone_mid && Number(a.zone_mid) > 0) {
+            try {
+              this.priceLines.push(this.candlestickSeries.createPriceLine({
+                price: Number(a.zone_mid),
+                color: '#eab308',
+                lineWidth: 1,
+                lineStyle: LS.Solid,
+                axisLabelVisible: true,
+                title: a.zone_active ? 'ZONE RETEST (ACTIVE)' : 'ZONE MID'
+              }));
+            } catch (e) {}
+
+            // Retest Zone High (Amber Dashed)
+            if (a.zone_high && Number(a.zone_high) > Number(a.zone_mid)) {
+              try {
+                this.priceLines.push(this.candlestickSeries.createPriceLine({
+                  price: Number(a.zone_high),
+                  color: '#f59e0b',
+                  lineWidth: 1,
+                  lineStyle: LS.Dashed,
+                  axisLabelVisible: false,
+                  title: 'ZONE HIGH'
+                }));
               } catch (e) {}
             }
-          }, 2500);
+
+            // Retest Zone Low (Amber Dashed)
+            if (a.zone_low && Number(a.zone_low) < Number(a.zone_mid)) {
+              try {
+                this.priceLines.push(this.candlestickSeries.createPriceLine({
+                  price: Number(a.zone_low),
+                  color: '#f59e0b',
+                  lineWidth: 1,
+                  lineStyle: LS.Dashed,
+                  axisLabelVisible: false,
+                  title: 'ZONE LOW'
+                }));
+              } catch (e) {}
+            }
+          }
+
+          // 4. Structural Invalidation / Stop
+          const st = a.stop || a.invalidation;
+          if (st && Number(st) > 0) {
+            try {
+              this.priceLines.push(this.candlestickSeries.createPriceLine({
+                price: Number(st),
+                color: '#ef4444',
+                lineWidth: 1,
+                lineStyle: LS.Dotted,
+                axisLabelVisible: true,
+                title: 'STOP / INVALID'
+              }));
+            } catch (e) {}
+          }
+
+          // 5. Structural Target
+          if (a.target && Number(a.target) > 0) {
+            try {
+              this.priceLines.push(this.candlestickSeries.createPriceLine({
+                price: Number(a.target),
+                color: '#06b6d4',
+                lineWidth: 1,
+                lineStyle: LS.Dotted,
+                axisLabelVisible: true,
+                title: 'TARGET'
+              }));
+            } catch (e) {}
+          }
         },
 
-        async loadHistory() {
+        applyMarkers(markers) {
+          if (!this.candlestickSeries) return;
+          if (Array.isArray(markers)) {
+            this.currentMarkers = markers;
+          }
+          const list = this.currentMarkers || [];
+          if (!this.showIndicatorMarkers || !list.length) {
+            try {
+              if (this.markersPrimitive && typeof this.markersPrimitive.setMarkers === 'function') {
+                this.markersPrimitive.setMarkers([]);
+              }
+              if (typeof this.candlestickSeries.setMarkers === 'function') {
+                this.candlestickSeries.setMarkers([]);
+              }
+            } catch (e) {}
+            return;
+          }
+
+          const sorted = [...list].sort((a, b) => a.time - b.time);
           try {
-            const res = await fetch('/history');
-            if (res.ok) {
-              this.history = await res.json();
+            if (typeof this.candlestickSeries.setMarkers === 'function') {
+              this.candlestickSeries.setMarkers(sorted);
+            } else if (typeof LightweightCharts !== 'undefined' && typeof LightweightCharts.createSeriesMarkers === 'function') {
+              if (!this.markersPrimitive) {
+                this.markersPrimitive = LightweightCharts.createSeriesMarkers(this.candlestickSeries, sorted);
+              } else {
+                this.markersPrimitive.setMarkers(sorted);
+              }
             }
           } catch (e) {
-            console.error("History error", e);
+            console.warn('applyMarkers error:', e);
           }
+        },
+
+        async loadCandles(symbol) {
+          if (!this.candlestickSeries) return;
+          this.chartLoading = true;
+          try {
+            const res = await fetch('/api/candles/' + symbol);
+            const candles = await res.json();
+            if (Array.isArray(candles) && candles.length) {
+              const formatted = candles.map(c => ({
+                time: Math.floor(Number(c.openTime) / 1000),
+                open: Number(c.open),
+                high: Number(c.high),
+                low: Number(c.low),
+                close: Number(c.close),
+              })).filter(c => !isNaN(c.time) && !isNaN(c.open) && !isNaN(c.close));
+
+              formatted.sort((a, b) => a.time - b.time);
+              const deduped = [];
+              for (const c of formatted) {
+                if (!deduped.length || deduped[deduped.length - 1].time < c.time) {
+                  deduped.push(c);
+                }
+              }
+              if (deduped.length) {
+                // Remove price lines before setData so scale autoscale fits the new symbol's price
+                if (this.priceLines && this.priceLines.length) {
+                  for (const pl of this.priceLines) {
+                    try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
+                  }
+                }
+                this.priceLines = [];
+
+                this.candlestickSeries.setData(deduped);
+                this.chart.timeScale().fitContent();
+                this.candlesLoaded = true;
+                this.candlesCount = deduped.length;
+
+                // Fetch and apply full indicator structure markers & levels
+                try {
+                  const indRes = await fetch('/api/indicator/' + symbol);
+                  const indData = await indRes.json();
+                  if (Array.isArray(indData.markers)) {
+                    // Safe filter: ensure every marker time actually exists on this candlestick series
+                    const candleTimes = new Set(deduped.map(c => c.time));
+                    const validMarkers = indData.markers.filter(m => candleTimes.has(m.time));
+                    this.applyMarkers(validMarkers);
+                  }
+                  if (indData.levels) {
+                    this.updateChartIndicators(indData.levels);
+                  }
+                } catch (ie) {
+                  console.warn('indicator fetch error:', ie);
+                }
+              }
+            }
+          } catch (e) {
+            console.error('loadCandles error:', e);
+          } finally {
+            this.chartLoading = false;
+          }
+        },
+
+        updateChartRealtime() {
+          if (!this.candlestickSeries || !this.data.symbols) return;
+          const symData = this.data.symbols[this.activeChartSymbol];
+          if (!symData || !symData.forming_bar) return;
+
+          const b = symData.forming_bar;
+          const t = Math.floor(Number(b.openTime) / 1000);
+          if (!t || isNaN(t)) return;
+
+          const candle = {
+            time: t,
+            open: Number(b.open),
+            high: Number(b.high),
+            low: Number(b.low),
+            close: Number(b.close),
+          };
+          try {
+            this.candlestickSeries.update(candle);
+          } catch (e) {}
+        },
+
+        symSpot(symbol) {
+          const s = this.data.symbols?.[symbol];
+          if (s && s.spot != null) {
+            const p = s.pip_size != null ? s.pip_size : 3;
+            return Number(s.spot).toFixed(p);
+          }
+          if (s && s.forming_bar && s.forming_bar.close != null) {
+            return Number(s.forming_bar.close).toFixed(3);
+          }
+          return '—';
+        },
+
+        symDir(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return a?.direction_label || 'NEUTRAL';
+        },
+
+        symDirClass(symbol) {
+          const d = this.symDir(symbol);
+          if (d === 'UP') return 'text-emerald-400';
+          if (d === 'DOWN') return 'text-rose-400';
+          return 'text-slate-400';
+        },
+
+        symBreak(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return a?.break_label || 'NONE';
+        },
+
+        symZoneText(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          if (!a || !a.zone_active) return 'No active zone';
+          const age = a.retest_age != null ? a.retest_age : 0;
+          const mid = a.zone_mid != null ? Number(a.zone_mid).toFixed(2) : '—';
+          return 'Active @ ' + mid + ' (' + age + '/12 bars)';
+        },
+
+        symZoneClass(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return a?.zone_active ? 'text-amber-300 font-bold' : 'text-slate-500';
+        },
+
+        symSupport(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return a?.support ? Number(a.support).toFixed(2) : '—';
+        },
+
+        symResistance(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return a?.resistance ? Number(a.resistance).toFixed(2) : '—';
+        },
+
+        symStop(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return Number(a?.stop || a?.invalidation || 0);
+        },
+
+        symTarget(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return Number(a?.target || 0);
+        },
+
+        symSignalConfirmed(symbol) {
+          const a = this.data.symbols?.[symbol]?.analysis;
+          return !!a?.signal_confirmed;
+        },
+
+        activeParentText() {
+          const a = this.data.symbols?.[this.activeChartSymbol]?.analysis;
+          if (!a) return '—';
+          const p1 = (a.parent1?.tf || '') + ' ' + (a.parent1?.dir || '—');
+          const p2 = (a.parent2?.tf || '') + ' ' + (a.parent2?.dir || '—');
+          return p1 + ' · ' + p2;
         },
 
         async startBot() {
+          if (this.botBusy) return;
           this.botBusy = true;
+          this.running = true;
+          this.suppress = Date.now() + 3000;
           try {
-            const res = await fetch('/api/start', { method: 'POST' });
-            const d = await res.json();
-            if (d.ok) this.running = true;
-          } catch (e) {
-            alert("Error starting bot: " + e);
-          } finally {
-            this.botBusy = false;
-          }
+            const d = await (await fetch('/api/start', { method: 'POST' })).json();
+            this.running = !!d.running;
+          } catch (e) { this.running = false; }
+          this.botBusy = false;
         },
 
         async stopBot() {
+          if (this.botBusy) return;
           this.botBusy = true;
+          this.running = false;
+          this.suppress = Date.now() + 3000;
           try {
-            const res = await fetch('/api/stop', { method: 'POST' });
-            const d = await res.json();
-            if (d.ok) this.running = false;
-          } catch (e) {
-            alert("Error stopping bot: " + e);
-          } finally {
-            this.botBusy = false;
-          }
+            const d = await (await fetch('/api/stop', { method: 'POST' })).json();
+            this.running = !!d.running;
+          } catch (e) { this.running = true; }
+          this.botBusy = false;
         },
 
-        async resetStats() {
-          if (!confirm("Are you sure you want to reset session stats and Martingale step?")) return;
+        async closeTrade(contractId) {
+          if (!confirm('Close this position immediately at current market value?')) return;
           try {
-            await fetch('/api/reset_stats', { method: 'POST' });
+            await fetch('/api/close-trade/' + contractId, { method: 'POST' });
+            await this.refresh();
           } catch (e) {
-            alert("Reset error: " + e);
+            alert('Failed to close position: ' + e);
           }
         },
 
         guardText() {
-          const ts = this.data.trading_state;
-          if (!ts) return "Connecting...";
-          if (!ts.authorized) return "Deriv WebSocket authorization pending or invalid credentials.";
-          if (ts.last_error) return "Error: " + ts.last_error;
-          return "Ready to connect";
-        },
-
-        reasonBadgeClass(reason) {
-          if (!reason) return 'bg-slate-800 text-slate-400';
-          if (reason === 'entered') return 'bg-emerald-950 text-emerald-400 border border-emerald-800';
-          if (reason.includes('outside_3m') || reason.includes('outside_window')) return 'bg-amber-950 text-amber-300 border border-amber-800';
-          if (reason.includes('target_reached')) return 'bg-purple-950 text-purple-300 border border-purple-800';
-          if (reason.includes('stop_loss_reached')) return 'bg-rose-950 text-rose-300 border border-rose-800';
-          if (reason.includes('martingale_max_steps')) return 'bg-rose-950 text-rose-300 border border-rose-800';
-          if (reason.includes('noise_buffer')) return 'bg-amber-950/80 text-amber-300 border border-amber-800';
-          if (reason === 'trade_in_progress') return 'bg-cyan-950 text-cyan-300 border border-cyan-800';
-          return 'bg-slate-800 text-slate-300 border border-slate-700';
-        },
-
-        formatSeconds(sec) {
-          if (sec == null || isNaN(sec)) return "00:00";
-          const m = Math.floor(sec / 60);
-          const s = Math.floor(sec % 60);
-          return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-        },
-
-        formatWindowMinutes(sec, min) {
-          let s = sec;
-          if (s == null && min != null) s = Number(min) * 60;
-          if (s == null || isNaN(s)) return '3m';
-          s = Math.round(Number(s));
-          if (s <= 0) return '0m';
-          if (s % 60 === 0) {
-            return (s / 60) + 'm';
-          }
-          const m = (s / 60).toFixed(2).replace(/\.?0+$/, '');
-          return `${m}m (${s}s)`;
-        },
-
-        formatWindowCutoff(sec, min) {
-          let s = sec;
-          if (s == null && min != null) s = Number(min) * 60;
-          if (s == null || isNaN(s)) return '3m (Cutoff)';
-          s = Math.round(Number(s));
-          if (s % 60 === 0) {
-            return (s / 60) + 'm (Cutoff)';
-          }
-          const m = (s / 60).toFixed(2).replace(/\.?0+$/, '');
-          return `${m}m / ${s}s (Cutoff)`;
-        },
-
-        formatDec(v) {
-          if (v == null || isNaN(v)) return '---';
-          const pip = this.data.prices?.pip_size || 2;
-          return Number(v).toFixed(pip);
-        },
-
-        formatCurrency(v, cur) {
-          if (v == null || isNaN(v)) return '---';
-          const c = cur || 'USD';
-          return c + ' ' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        },
-
-        formatTime(iso) {
-          if (!iso) return '---';
-          try {
-            const d = new Date(iso);
-            return d.toTimeString().split(' ')[0];
-          } catch (e) {
-            return iso;
-          }
+          const g = {
+            no_token: 'Personal Access Token required in Settings',
+            not_authorized: 'connecting to Deriv…',
+            account_unknown: 'reading account info…',
+            no_demo_account: 'no demo account found on this token',
+            no_real_account: 'no real account found on this token',
+            migration_pending: 'Deriv account migration in progress'
+          };
+          return g[this.data.trading_state?.guard || ''] || 'verify credentials in Settings';
         }
-      }
+      };
     }
   </script>
 </body>

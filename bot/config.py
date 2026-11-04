@@ -1,136 +1,121 @@
 import os
 import json
-from typing import List, Dict, Any
+from typing import Dict, List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-SUPPORTED_SYMBOLS = [
-    "R_100",
-    "R_75",
-    "R_50",
-    "R_25",
-    "R_10",
-    "1HZ100V",
-    "1HZ75V",
-    "1HZ50V",
-    "1HZ25V",
-    "1HZ10V",
-]
 
-SUPPORTED_TIMEFRAMES = [1, 2, 3, 5, 10, 15]
+# Deriv synthetic spike indices traded by this bot with Multipliers:
+# - BOOM1000: ticks down, spikes up -> traded with MULTUP on bullish structure retest
+# - CRASH1000: ticks up, drops down -> traded with MULTDOWN on bearish structure retest
+SUPPORTED_SYMBOLS = ["BOOM1000", "CRASH1000"]
+
+# Supported multiplier leverage options on Deriv:
+# 100x, 200x, 300x, 400x, 500x
+SUPPORTED_MULTIPLIERS = [100, 200, 300, 400, 500]
+
+SUPPORTED_TIMEFRAMES = [1, 2, 5, 15]
+
+# Spikebot 3.00 Standard Engine: Active Structure Confluence (from SpikebotSignals.mqh)
+# Local confirmed retest entry + higher-timeframe closed parent confluence.
+DEFAULT_SIGNAL_MODE = "active_structure"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
 
-    MODE: str = "demo"  # "demo" | "live"
+    # "demo" = Deriv virtual account; "live" = real money account.
+    MODE: str = "demo"
 
+    # ── Deriv connection (REST -> OTP -> WS) ─────────────────────────
     DERIV_APP_ID: str = os.getenv("DERIV_APP_ID", "")
-    DERIV_TOKEN: str = os.getenv("DERIV_TOKEN", "")
+    DERIV_TOKEN: str = os.getenv("DERIV_TOKEN", "")   # Personal Access Token (pat_...)
 
-    SYMBOL: str = "R_100"
+    # Active symbols traded concurrently (any subset of SUPPORTED_SYMBOLS)
+    SYMBOLS: List[str] = ["BOOM1000", "CRASH1000"]
+    SYMBOL: str = "BOOM1000"
+
     CURRENCY: str = "USD"
 
-    # Candle strategy parameters
+    # Multiplier leverage: 100, 200, 300, 400, or 500
+    MULTIPLIER: int = 100
+
+    # Spikebot Standard Strategy Mode (Active Structure)
+    SIGNAL_MODE: str = "active_structure"
+
+    # Base candle timeframe in minutes (1, 2, 5, 15)
     TIMEFRAME_MINUTES: int = 5
-    DURATION_TICKS: int = 5
-    TRADE_WINDOW_SECONDS: float = 180.0  # Allowed trade window in seconds (e.g. 180s for 3m, 45s for 1m candle)
-    TRADE_WINDOW_MINUTES: float = 3.0    # Maintained for minutes display
 
-    # Breakout & Noise Filter parameters
-    BREAKOUT_CANDLES_COUNT: int = 50     # Number of past completed candles to sample for avg move
-    BREAKOUT_THRESHOLD_PCT: float = 10.0 # Price must move >= this % of avg move beyond open to trigger entry
+    # Structure Atlas swing & break detection window (default 96 from MT5)
+    STRUCTURE_WINDOW: int = 96
 
-    # Base stake & risk
-    RISK_TYPE: str = "fixed"  # "fixed" or "percent"
-    RISK_VALUE: float = 1.0
+    # Risk sizing: "percent" = RISK_VALUE% of balance; "fixed" = RISK_VALUE in USD.
+    RISK_TYPE: str = "percent"
+    RISK_VALUE: float = 5.0
 
-    # Martingale
-    MARTINGALE_ENABLED: bool = False
-    MARTINGALE_MULTIPLIER: float = 2.0
-    MARTINGALE_MAX_STEPS: int = 5
+    # Take Profit & Stop Loss are dynamically driven by Market Structure:
+    # - Structural Stop Loss (Swing Invalidation Level)
+    # - Structural Target (Opposing Swing Target)
+    TP_SL_MODE: str = "structural"
 
-    # Target Profit (strictly follows RISK_TYPE: fixed $ or % of balance)
-    TARGET_PROFIT_ENABLED: bool = False
-    TARGET_PROFIT_SCOPE: str = "candle_window"  # "candle_window" (or legacy "5m_window") or "session"
-    TARGET_PROFIT_AMOUNT: float = 5.0
+    # Maximum concurrent open positions per symbol
+    MAX_OPEN_TRADES_PER_SYMBOL: int = 1
 
-    # Stop Loss
-    STOP_LOSS_ENABLED: bool = False
-    STOP_LOSS_AMOUNT: float = 20.0
+    def active_symbols(self) -> List[str]:
+        syms = [s for s in self.SYMBOLS if s in SUPPORTED_SYMBOLS]
+        if not syms:
+            syms = [SUPPORTED_SYMBOLS[0]]
+        return syms
 
 
 def load_settings() -> Settings:
-    base = Settings()
+    base_settings = Settings()
     config_path = "config.json"
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            with open(config_path, "r") as f:
+                config_data = json.load(f)
 
-            if "mode" in data:
-                base.MODE = str(data["mode"]).lower()
+            if "mode" in config_data:
+                base_settings.MODE = config_data["mode"]
 
-            if "deriv" in data:
-                d = data["deriv"]
-                if "app_id" in d:
-                    base.DERIV_APP_ID = str(d["app_id"])
-                if "token" in d:
-                    base.DERIV_TOKEN = str(d["token"])
+            if "deriv" in config_data:
+                d = config_data["deriv"]
+                if "app_id" in d: base_settings.DERIV_APP_ID = str(d["app_id"])
+                if "token" in d: base_settings.DERIV_TOKEN = d["token"]
 
-            if "trading" in data:
-                t = data["trading"]
-                if "symbol" in t and t["symbol"] in SUPPORTED_SYMBOLS:
-                    base.SYMBOL = t["symbol"]
-                if "currency" in t:
-                    base.CURRENCY = t["currency"]
-                if "risk_type" in t:
-                    base.RISK_TYPE = t["risk_type"]
-                if "risk_value" in t:
-                    base.RISK_VALUE = float(t["risk_value"])
-                if "timeframe_minutes" in t:
-                    base.TIMEFRAME_MINUTES = int(t["timeframe_minutes"])
-                if "duration_ticks" in t:
-                    base.DURATION_TICKS = max(1, min(10, int(t["duration_ticks"])))
-                if "trade_window_seconds" in t:
-                    base.TRADE_WINDOW_SECONDS = float(t["trade_window_seconds"])
-                    base.TRADE_WINDOW_MINUTES = round(base.TRADE_WINDOW_SECONDS / 60.0, 2)
-                elif "trade_window_minutes" in t:
-                    base.TRADE_WINDOW_MINUTES = float(t["trade_window_minutes"])
-                    base.TRADE_WINDOW_SECONDS = float(base.TRADE_WINDOW_MINUTES * 60.0)
-                if "breakout_candles_count" in t:
-                    base.BREAKOUT_CANDLES_COUNT = max(5, min(200, int(t["breakout_candles_count"])))
-                if "breakout_threshold_pct" in t:
-                    base.BREAKOUT_THRESHOLD_PCT = max(0.0, min(100.0, float(t["breakout_threshold_pct"])))
+            if "trading" in config_data:
+                trading = config_data["trading"]
+                if "symbols" in trading and isinstance(trading["symbols"], list):
+                    clean_syms = [s for s in trading["symbols"] if s in SUPPORTED_SYMBOLS]
+                    if clean_syms:
+                        base_settings.SYMBOLS = clean_syms
+                elif "symbol" in trading and trading["symbol"] in SUPPORTED_SYMBOLS:
+                    base_settings.SYMBOLS = [trading["symbol"]]
 
-            if "martingale" in data:
-                m = data["martingale"]
-                if "enabled" in m:
-                    base.MARTINGALE_ENABLED = bool(m["enabled"])
-                if "multiplier" in m:
-                    base.MARTINGALE_MULTIPLIER = float(m["multiplier"])
-                if "max_steps" in m:
-                    base.MARTINGALE_MAX_STEPS = int(m["max_steps"])
+                base_settings.SYMBOL = base_settings.SYMBOLS[0]
 
-            if "target_profit" in data:
-                tp = data["target_profit"]
-                if "enabled" in tp:
-                    base.TARGET_PROFIT_ENABLED = bool(tp["enabled"])
-                if "scope" in tp:
-                    base.TARGET_PROFIT_SCOPE = tp["scope"]
-                if "amount" in tp:
-                    base.TARGET_PROFIT_AMOUNT = float(tp["amount"])
-
-            if "stop_loss" in data:
-                sl = data["stop_loss"]
-                if "enabled" in sl:
-                    base.STOP_LOSS_ENABLED = bool(sl["enabled"])
-                if "amount" in sl:
-                    base.STOP_LOSS_AMOUNT = float(sl["amount"])
+                if "currency" in trading:
+                    base_settings.CURRENCY = trading["currency"]
+                if "multiplier" in trading:
+                    mult = int(trading["multiplier"])
+                    if mult in SUPPORTED_MULTIPLIERS:
+                        base_settings.MULTIPLIER = mult
+                base_settings.SIGNAL_MODE = "active_structure"
+                if "timeframe_minutes" in trading:
+                    tf = int(trading["timeframe_minutes"])
+                    if tf in SUPPORTED_TIMEFRAMES:
+                        base_settings.TIMEFRAME_MINUTES = tf
+                if "risk_type" in trading:
+                    base_settings.RISK_TYPE = trading["risk_type"]
+                if "risk_value" in trading:
+                    base_settings.RISK_VALUE = float(trading["risk_value"])
+                if "max_open_trades_per_symbol" in trading:
+                    base_settings.MAX_OPEN_TRADES_PER_SYMBOL = max(1, int(trading["max_open_trades_per_symbol"]))
 
         except Exception as e:
             print(f"Warning: Failed to load config.json: {e}")
 
-    return base
+    return base_settings
 
 
 settings = load_settings()

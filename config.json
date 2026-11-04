@@ -2,52 +2,35 @@
   "mode": "demo",
   "deriv": {
     "app_id": "33LuGFJlOlfbqzHVZLFCi",
-    "token": "pat_b7ec71179e3e627146c2e14d05a677747432720bce15478b8d47313998872175"
+    "token": "pat_ee87daeca5b7e28b7d7c2f73a67f7e00a040e713a37e42622b76bc23ecd12bee"
   },
   "trading": {
-    "symbol": "R_100",
+    "symbols": [
+      "BOOM1000",
+      "CRASH1000"
+    ],
     "currency": "USD",
-    "risk_type": "fixed",
-    "risk_value": 2,
+    "multiplier": 300,
     "timeframe_minutes": 5,
-    "duration_ticks": 5,
-    "trade_window_seconds": 180.0,
-    "trade_window_minutes": 3.0,
-    "breakout_candles_count": 50,
-    "breakout_threshold_pct": 10.0
-  },
-  "martingale": {
-    "enabled": true,
-    "multiplier": 2,
-    "max_steps": 3
-  },
-  "target_profit": {
-    "enabled": true,
-    "scope": "candle_window",
-    "amount": 10
-  },
-  "stop_loss": {
-    "enabled": false,
-    "amount": 20
+    "risk_type": "percent",
+    "risk_value": 2.0,
+    "max_open_trades_per_symbol": 1
   },
   "supported_symbols": [
-    "R_100",
-    "R_75",
-    "R_50",
-    "R_25",
-    "R_10",
-    "1HZ100V",
-    "1HZ75V",
-    "1HZ50V",
-    "1HZ25V",
-    "1HZ10V"
+    "BOOM1000",
+    "CRASH1000"
+  ],
+  "supported_multipliers": [
+    100,
+    200,
+    300,
+    400,
+    500
   ],
   "supported_timeframes": [
     1,
     2,
-    3,
     5,
-    10,
     15
   ]
 }

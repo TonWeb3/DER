@@ -1,92 +1,62 @@
-# Deriv Rise and Fall Trading Bot (5-Minute Candle Open-Breakout)
+# Spikebot 3.00 — Deriv Multipliers Market Structure Bot (BOOM 1000 & CRASH 1000)
 
-An automated **Rise / Fall (CALL / PUT)** trading bot for **Deriv Synthetic Indices** (e.g. Volatility 100, 75, 50, 25, 10, etc.) with a **FastAPI** backend and responsive **Alpine.js + TailwindCSS** dark-mode dashboard.
-
----
-
-## 🎯 Strategy & Logic
-
-1. **5-Minute Candle Tracking**:
-   - The bot tracks live ticks and groups them into 5-minute candles (`00:00`, `05:00`, `10:00`, etc.).
-   - At the start of each 5m candle, the first tick records the **Open Price**.
-2. **Rise / Fall Direction**:
-   - **Current Spot > Candle Open**: Trades **RISE (`CALL`)**.
-   - **Current Spot < Candle Open**: Trades **FALL (`PUT`)**.
-   - **Current Spot == Candle Open**: Holds / Neutral (no trade).
-3. **Expiry Duration in Ticks**:
-   - The contract expiry is set in **ticks** (default: **5 ticks**, configurable in Settings between 1 and 10 ticks).
-4. **Candle Countdown & Continuous Trading Window**:
-   - The dashboard displays a live countdown timer showing the remaining time in the current 5-minute candle.
-   - **Continuous Trading**: The bot executes trades **continuously** (each trade begins as soon as the previous 5-tick contract finishes) within the **first 3 minutes** of the 5-minute candle (configurable in Settings).
-   - **Gating Rules**:
-     - It trades continuously until it hits the **Target Profit (TP)** or **Stop Loss (SL)** for that 5m window (when Target Scope is set to `5m_window`), or until the **Allowed Trade Window (Minutes)** has passed.
-     - When TP or SL for the 5m window is hit, trading pauses for the remainder of that 5-minute candle, and automatically resets and resumes when the next 5-minute candle opens.
-     - Once the trade window expires (e.g. past the first 3 minutes of the 5m candle), trading pauses until the next candle opens.
-5. **Martingale Money Management**:
-   - Toggle to turn Martingale **ON** or **OFF**.
-   - Configurable **Multiplier** (e.g. `2.0x`) and **Max Steps** (e.g. `5` steps).
-   - On consecutive losses: Stake increases according to `base_stake * (multiplier ^ step)`.
-   - On a win: Resets stake back to the base stake.
-6. **Target Profit & Stop Loss Risk Management**:
-   - Both **Target Profit** and **Stop Loss** strictly inherit their calculation format from **Risk / Stake Type**:
-     - When `risk_type` is **`percent`**: Both Target Profit and Stop Loss represent a `%` of your live account balance (e.g. 5% target profit on a $1,000 balance = $50.00; 15% stop loss = $150.00 max drawdown).
-     - When `risk_type` is **`fixed`**: Both evaluate strictly as fixed dollar amounts ($).
-   - **Scope Modes**:
-     - **5m Window Target**: If profit target or stop loss is reached within the current 5-minute candle, trading pauses for the rest of that candle and resets on the next 5m candle.
-     - **General / Session Target**: If cumulative session net profit or stop loss reaches the threshold, the bot halts session trading.
+A high-performance automated trading bot accurately converted from the **MetaTrader 5 (MT5) Spikebot 3.00 EA** (`StructureCore.mqh`, `SpikebotSignals.mqh`, `Spikebot.mq5`), engineered specifically for trading **Deriv Multiplier contracts** (`MULTUP` / `MULTDOWN`) on **BOOM 1000** and **CRASH 1000**.
 
 ---
 
-## 🚀 Getting Started
+## The Strategy: Structure Atlas & Role-Reversal Retest
 
-### 1. Install Requirements
+The bot implements the exact algorithmic rules of the MT5 Spikebot:
+
+1. **Confirmed Swings (5-Bar Pivot Engine)**:
+   - Identifies swing highs ($h1, h2$) and swing lows ($l1, l2$) with a 5-bar causal window ($[p-2 \dots p+2]$).
+   - Pivots are usable strictly 2 bars after their center, eliminating lookahead bias.
+   - Evaluates baseline structure scale using the median range of the prior 20 bars (`MSScale`).
+
+2. **Market Structure Breaks (BOS & CHoCH)**:
+   - Detects breaks when price closes beyond the confirmed swing level by $\ge 0.10 \times \text{scale}$.
+   - **BOS (Break of Structure)**: Break in the direction of the existing trend.
+   - **CHoCH (Change of Character)**: Break opposing the existing trend, confirming a structural trend reversal.
+
+3. **Role-Reversal Retest Zones**:
+   - Created at the broken swing price level ($h1$ or $l1$).
+   - Upper boundary: $zone\_mid + 0.25 \times scale$
+   - Lower boundary: $zone\_mid - 0.25 \times scale$
+   - Structural invalidation: $zone\_mid - direction \times 0.5 \times scale$
+   - Active for up to 12 bars unless invalidated by a close past the invalidation level.
+
+4. **Retest Entry Mechanics (Enter Before the Spike)**:
+   - **Touch & Hold**: Low touches zone high, and close holds on the correct side of $zone\_mid$.
+   - **No Spike on Entry**: Candle body $\le 2 \times scale$ ensures entry is executed *before* the spike occurs.
+   - **Momentum Filter**: Rejection pinbar (close in extreme 35% of bar range) OR Slowing momentum ($|body| \le 0.85 \times |previous|$).
+   - **Risk/Reward**: Minimum 1.5x risk room to opposing swing extreme.
+
+5. **Multi-Timeframe Confluence (Parent Ladder)**:
+   - Base timeframe is confirmed by 2 closed higher parent timeframes:
+     - **1m** base $\rightarrow$ Parents: **5m** & **15m**
+     - **2m** base $\rightarrow$ Parents: **10m** & **30m**
+     - **5m** base $\rightarrow$ Parents: **15m** & **60m (1h)**
+     - **15m** base $\rightarrow$ Parents: **60m (1h)** & **240m (4h)**
+   - **Active Structure (Default)**: Local setup + at least 1 closed parent agrees.
+   - **Aligned Structure**: All closed parents must strictly agree with the spike direction.
+
+---
+
+## Contract Execution (Deriv Multipliers)
+
+- **BOOM 1000**: When a confirmed bullish structure retest fires $\rightarrow$ enters **`MULTUP`** to capture upward spikes.
+- **CRASH 1000**: When a confirmed bearish structure retest fires $\rightarrow$ enters **`MULTDOWN`** to capture downward crashes.
+- **Multiplier Leverage**: Selectable from **`100x`**, **`200x`**, **`300x`**, **`400x`**, or **`500x`**.
+- **Risk Protection**: Maximum loss is strictly capped to the initial stake; optional Take-Profit ($) and Stop-Loss ($) triggers automatically close positions.
+- **Manual Control**: 1-click **`✕ Close Position`** button in the open trades table.
+
+---
+
+## Quick Start
 
 ```bash
 pip install -r requirements.txt
+python main.py
 ```
 
-### 2. Run the Bot
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8070
-```
-
-Open your browser at [http://localhost:8070](http://localhost:8070).
-
----
-
-## ⚙️ Configuration
-
-Open the **Settings** page at [http://localhost:8070/settings](http://localhost:8070/settings):
-- **Account Mode**: Demo or Live.
-- **Deriv App ID & Token**: Enter your App ID (from `developers.deriv.com`) and Personal Access Token (with Read & Trade permissions). Click **Save & Test Connection**.
-- **Symbol**: Select between Volatility indices (`R_100`, `R_75`, `R_50`, `R_25`, `R_10`, `1HZ100V`, etc.).
-- **Expiry in Ticks**: Set duration (default: `5 ticks`).
-- **Allowed Trade Window**: Set allowed minutes inside 5m candle (default: `3.0 minutes`).
-- **Risk / Stake Type**: Choose Fixed ($) or Percent of Balance (%), which automatically sets the format for Base Stake, Target Profit, and Stop Loss.
-- **Martingale**: Toggle ON/OFF, multiplier, max steps.
-- **Target Profit**: Toggle ON/OFF, choose between `5m Window` or `Session Total`, and set target value.
-- **Stop Loss**: Toggle ON/OFF, and set stop loss threshold (evaluated against 5m candle or session).
-
----
-
-## ⚡ Full WebSocket Architecture (Zero Polling)
-
-The entire application operates via **full real-time WebSockets**:
-1. **Deriv WebSocket (`bot/deriv_ws.py`)**: Subscribes to live ticks (`{"ticks": symbol, "subscribe": 1}`) and balances. Each incoming tick instantly trips an event trigger (`deriv.tick_event.set()`), evaluating the strategy with **0ms latency**.
-2. **Client Streaming WebSocket (`main.py` -> `/ws`)**: Broadcasts real-time snapshots (live spot, candle countdown, active trades, logs) directly to connected browsers via persistent WebSocket connections.
-3. **No HTTP Polling**: `poll_interval_ms` and frontend `setInterval` polling have been completely removed.
-
----
-
-## 📊 File Layout
-
-- `main.py` — FastAPI application, WebSocket connection manager (`/ws`), background update loop, and trade execution.
-- `bot/deriv_ws.py` — Deriv REST + OTP + WebSocket client handling live ticks, balances, proposals, and orders.
-- `bot/strategy.py` — 5m candle tracking, Open price comparison, Martingale, and Target Profit logic.
-- `bot/config.py` — Settings loading and runtime configuration management.
-- `bot/utils.py` — CSV logging and utility helpers.
-- `templates/index.html` — Real-time dark mode dashboard with WebSocket connection (`/ws`), 5m countdown progress bar, and active contract tables.
-- `templates/settings.html` — Configuration UI for API tokens, timing, Martingale, and risk parameters.
-- `config.json` — Persisted user settings.
-- `state_data.json` — Persisted trade history and session metrics.
+Open **http://localhost:8070** in your browser. Configure your Deriv App ID and Personal Access Token in **Settings**, then press **▶ Start Bot**.

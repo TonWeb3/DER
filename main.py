@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -46,6 +46,8 @@ class SymbolState:
         self.seeded = False
         self.latest_analysis: Dict[str, Any] = {}
         self.last_candidate: Optional[Dict[str, Any]] = None
+        self.last_logged_break: Optional[str] = None
+        self.last_logged_zone: bool = False
         self.wins = 0
         self.losses = 0
 
@@ -165,11 +167,20 @@ state: Dict[str, Any] = {
 
 
 def log_message(msg: str):
-    line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
     print(line)
     state["logs"].append(line)
-    if len(state["logs"]) > 120:
+    if len(state["logs"]) > 200:
         state["logs"].pop(0)
+
+    # Persist directly to activity.log so logs are permanently preserved
+    try:
+        utils.ensure_dir("logs")
+        with open("logs/activity.log", "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception as e:
+        print(f"activity.log write error: {e}")
+
     try:
         loop = asyncio.get_running_loop()
         if loop and loop.is_running():
@@ -182,6 +193,7 @@ def save_state():
     try:
         with open("state_data.json", "w") as f:
             json.dump({
+                "running": state["running"],
                 "active_trades": state["active_trades"],
                 "trade_history": state["trade_history"],
                 "entered_windows": state["entered_windows"]
@@ -192,13 +204,25 @@ def save_state():
 
 def load_state():
     try:
+        # Load previous activity logs from disk if available
+        if os.path.exists("logs/activity.log"):
+            try:
+                with open("logs/activity.log", "r", encoding="utf-8") as f:
+                    lines = [ln.strip() for ln in f if ln.strip()]
+                    state["logs"] = lines[-100:]
+            except Exception as e:
+                print(f"error loading logs/activity.log: {e}")
+
         if os.path.exists("state_data.json"):
             with open("state_data.json") as f:
                 d = json.load(f)
+            state["running"] = bool(d.get("running", False))
             state["active_trades"] = d.get("active_trades", [])
             state["trade_history"] = d.get("trade_history", [])
             state["entered_windows"] = d.get("entered_windows", d.get("entered_markets", []))
-            log_message("State loaded")
+            log_message("Persistent state and history loaded")
+        else:
+            log_message("No previous state file found; fresh session initialized")
     except Exception as e:
         print(f"load_state error: {e}")
 
@@ -316,6 +340,7 @@ async def seed_candles_all():
     for sym in active_syms:
         sym_st = get_symbol_state(sym)
         p1_min, p2_min = spikebot.parent_timeframes_for(settings.TIMEFRAME_MINUTES)
+        sym_st.analyzer.timeframe_minutes = settings.TIMEFRAME_MINUTES
         sym_st.analyzer.p1_minutes = p1_min
         sym_st.analyzer.p2_minutes = p2_min
         sym_st.analyzer.signal_mode = settings.SIGNAL_MODE
@@ -323,10 +348,10 @@ async def seed_candles_all():
 
         # 1. Base timeframe candles
         base = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, settings.TIMEFRAME_MINUTES * 60)
-        # 2. Parent 1 timeframe candles
-        p1 = await deriv.fetch_seed_candles(sym, 120, p1_min * 60)
-        # 3. Parent 2 timeframe candles
-        p2 = await deriv.fetch_seed_candles(sym, 120, p2_min * 60)
+        # 2. Parent 1 timeframe candles (300 candles ensure full structure warmup)
+        p1 = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, p1_min * 60)
+        # 3. Parent 2 timeframe candles (300 candles ensure full structure warmup)
+        p2 = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, p2_min * 60)
 
         if base:
             sym_st.base_candles = base
@@ -638,6 +663,22 @@ async def update_loop():
                         else:
                             reason = exec_res
 
+                # Log newly detected breaks or zone status
+                curr_break = analysis.get("break_label", "NONE")
+                curr_zone = bool(analysis.get("zone_active", False))
+                if curr_break != "NONE" and curr_break != sym_st.last_logged_break:
+                    sym_st.last_logged_break = curr_break
+                    log_message(f"[{sym}] ⚡ Break Confirmed: {curr_break} @ {spot:.2f} | Retest zone: [{analysis.get('zone_low', 0):.2f} - {analysis.get('zone_high', 0):.2f}]")
+
+                if curr_zone and not sym_st.last_logged_zone:
+                    sym_st.last_logged_zone = True
+                    log_message(f"[{sym}] Retest Zone active [{analysis.get('zone_low', 0):.2f} - {analysis.get('zone_high', 0):.2f}] | Invalidation: {analysis.get('invalidation', 0):.2f}")
+                elif not curr_zone and sym_st.last_logged_zone:
+                    sym_st.last_logged_zone = False
+
+                if base_closed and spot:
+                    log_message(f"[{sym} {settings.TIMEFRAME_MINUTES}m Closed] Close: {spot:.2f} | Trend: {analysis.get('direction_label')} | Break: {curr_break} | Zone: {'Active (Age ' + str(analysis.get('retest_age')) + ')' if curr_zone else 'None'} | Gate: {reason}")
+
                 # Record signal telemetry
                 utils.append_csv_row("./logs/signals.csv", csv_header, [
                     datetime.now().isoformat(), sym, spot, contract_type,
@@ -659,6 +700,12 @@ async def update_loop():
                     "reason": reason,
                     "candles_count": len(sym_st.base_candles)
                 }
+
+            # Periodic heartbeat logging every 2 minutes when bot is running
+            if state["running"] and time.time() - state.get("last_heartbeat_at", 0) > 120:
+                state["last_heartbeat_at"] = time.time()
+                bal_str = f"${deriv.balance:.2f}" if deriv.balance is not None else "—"
+                log_message(f"[Heartbeat] Bot Active ({settings.TIMEFRAME_MINUTES}m) | Symbols: {active_syms} | Bal: {bal_str} | Open Trades: {len(state['active_trades'])}")
 
             # Update live state snapshot
             state["latest_data"] = {
@@ -781,6 +828,22 @@ async def logs():
     return state["logs"]
 
 
+@app.get("/api/logs/download")
+async def download_logs():
+    """Download full activity log file from startup."""
+    log_path = os.path.abspath("logs/activity.log")
+    if not os.path.exists(log_path):
+        utils.ensure_dir("logs")
+        with open(log_path, "w", encoding="utf-8") as f:
+            for l in state["logs"]:
+                f.write(l + "\n")
+    return FileResponse(
+        path=log_path,
+        filename=f"spikebot_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+        media_type="text/plain"
+    )
+
+
 @app.get("/history")
 async def history():
     return state["trade_history"]
@@ -881,13 +944,15 @@ async def close_trade(contract_id: str):
 @app.post("/api/start")
 async def start_trading():
     state["running"] = True
-    log_message("Trading STARTED by user (Spikebot 3.00 Engine Active)")
+    save_state()
+    log_message(f"Trading STARTED by user (Spikebot 3.00 Engine Active | TF: {settings.TIMEFRAME_MINUTES}m | Multiplier: {settings.MULTIPLIER}x | Symbols: {settings.active_symbols()})")
     return {"ok": True, "running": True}
 
 
 @app.post("/api/stop")
 async def stop_trading():
     state["running"] = False
+    save_state()
     log_message("Trading STOPPED by user")
     return {"ok": True, "running": False}
 
@@ -977,6 +1042,13 @@ async def post_settings(new: Dict[str, Any]):
             tf = int(t["timeframe_minutes"])
             if tf in SUPPORTED_TIMEFRAMES:
                 settings.TIMEFRAME_MINUTES = tf
+                for s in settings.active_symbols():
+                    st_obj = get_symbol_state(s)
+                    st_obj.analyzer.timeframe_minutes = tf
+                    p1_m, p2_m = spikebot.parent_timeframes_for(tf)
+                    st_obj.analyzer.p1_minutes = p1_m
+                    st_obj.analyzer.p2_minutes = p2_m
+                    st_obj.analyzer.structure_window = spikebot.ms_window(tf)
         if "risk_type" in t:
             settings.RISK_TYPE = t["risk_type"]
         if "risk_value" in t:
@@ -989,6 +1061,8 @@ async def post_settings(new: Dict[str, Any]):
         await deriv.update_symbols(settings.active_symbols())
         await seed_candles_all()
     elif settings.TIMEFRAME_MINUTES != old_tf:
+        p1_m, p2_m = spikebot.parent_timeframes_for(settings.TIMEFRAME_MINUTES)
+        log_message(f"Timeframe switched to {settings.TIMEFRAME_MINUTES}m (Parents: {p1_m}m, {p2_m}m) — reseeding candles")
         await seed_candles_all()
 
     return {"status": "ok"}

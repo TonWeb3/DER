@@ -280,44 +280,6 @@
           <span class="pulse-dot mr-2 text-cyan-400">●</span> Loading <span class="font-bold text-white ml-1 mr-1" x-text="activeChartSymbol"></span> candles &amp; indicators...
         </div>
 
-        <!-- Floating MT5-Style Indicator HUD Overlay -->
-        <div class="absolute top-4 left-4 z-10 bg-[#09222c]/90 backdrop-blur-md border border-[#184657] rounded-lg p-3 text-[11px] font-mono shadow-2xl space-y-1 select-none pointer-events-none max-w-[280px]">
-          <div class="flex items-center justify-between border-b border-[#184657] pb-1 font-bold">
-            <span class="text-amber-400 flex items-center gap-1">⚡ <span>Spikebot Indicator</span></span>
-            <span class="text-cyan-300" x-text="activeChartSymbol"></span>
-          </div>
-          <div class="flex items-center justify-between gap-3 pt-0.5">
-            <span class="text-slate-400">Structure:</span>
-            <span class="font-bold" :class="symDirClass(activeChartSymbol)" x-text="symDir(activeChartSymbol)"></span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-slate-400">Latest Break:</span>
-            <span class="font-bold text-slate-200" x-text="symBreak(activeChartSymbol)"></span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-slate-400">Retest Zone:</span>
-            <span class="font-bold" :class="symZoneClass(activeChartSymbol)" x-text="symZoneText(activeChartSymbol)"></span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-slate-400">Support / Resist:</span>
-            <span class="font-bold text-slate-300">
-              <span class="text-emerald-400" x-text="'S ' + symSupport(activeChartSymbol)"></span>
-              <span class="text-slate-600">|</span>
-              <span class="text-rose-400" x-text="'R ' + symResistance(activeChartSymbol)"></span>
-            </span>
-          </div>
-          <template x-if="symStop(activeChartSymbol) > 0">
-            <div class="flex items-center justify-between gap-3 border-t border-[#184657]/70 pt-1 text-[10px]">
-              <span class="text-slate-400">Stop / Target:</span>
-              <span class="font-bold">
-                <span class="text-rose-400" x-text="symStop(activeChartSymbol).toFixed(2)"></span>
-                <span class="text-slate-600">/</span>
-                <span class="text-cyan-400" x-text="symTarget(activeChartSymbol).toFixed(2)"></span>
-              </span>
-            </div>
-          </template>
-        </div>
-
         <div id="tv-chart" class="w-full h-80 sm:h-96 rounded-lg overflow-hidden"></div>
       </div>
     </div>
@@ -388,11 +350,23 @@
 
     <!-- History & Logs Tabs -->
     <div class="bg-[#09222c] rounded-xl border border-[#133c4a] overflow-hidden">
-      <div class="flex bg-[#0d2a37] border-b border-[#133c4a]">
-        <button @click="tab='history'" :class="tab==='history'?'bg-[#09222c] text-cyan-300 border-b-2 border-cyan-400':'text-slate-400'"
-                class="px-5 py-3 font-bold uppercase text-xs transition">Trade History</button>
-        <button @click="tab='logs'" :class="tab==='logs'?'bg-[#09222c] text-cyan-300 border-b-2 border-cyan-400':'text-slate-400'"
-                class="px-5 py-3 font-bold uppercase text-xs transition">Activity Logs</button>
+      <div class="flex justify-between items-center bg-[#0d2a37] border-b border-[#133c4a] px-2 sm:px-4">
+        <div class="flex">
+          <button @click="tab='history'" :class="tab==='history'?'bg-[#09222c] text-cyan-300 border-b-2 border-cyan-400':'text-slate-400'"
+                  class="px-4 sm:px-5 py-3 font-bold uppercase text-xs transition">Trade History</button>
+          <button @click="tab='logs'; loadLogs();" :class="tab==='logs'?'bg-[#09222c] text-cyan-300 border-b-2 border-cyan-400':'text-slate-400'"
+                  class="px-4 sm:px-5 py-3 font-bold uppercase text-xs transition flex items-center gap-1.5">
+            <span>Activity Logs</span>
+            <span x-show="logs.length" class="text-[10px] px-1.5 py-0.2 rounded-full bg-[#133c4a] text-cyan-200" x-text="logs.length"></span>
+          </button>
+        </div>
+        <div x-show="tab==='logs'" class="py-1">
+          <a href="/api/logs/download" download
+             class="bg-[#103442] hover:bg-[#1a4a5d] text-cyan-300 hover:text-white border border-[#1d4c5e] px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow">
+            <span>⬇</span>
+            <span>Download Full Logs</span>
+          </a>
+        </div>
       </div>
 
       <div class="p-4">
@@ -476,7 +450,20 @@
             this.initChart();
           });
           this.connectWs();
+          await this.loadLogs();
           await this.refresh();
+        },
+
+        async loadLogs() {
+          try {
+            const res = await fetch('/api/logs');
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              this.logs = [...data].reverse();
+            }
+          } catch (e) {
+            console.warn('loadLogs error:', e);
+          }
         },
 
         connectWs() {
@@ -546,6 +533,8 @@
             if (this.tab === 'history') {
               const hres = await fetch('/history');
               this.tradeHistory = (await hres.json()).reverse();
+            } else if (this.tab === 'logs') {
+              await this.loadLogs();
             }
             this.updateChartRealtime();
             this.updateChartIndicators();

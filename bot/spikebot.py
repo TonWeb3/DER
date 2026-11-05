@@ -102,7 +102,7 @@ def ms_scale(bars: List[MSBar], i: int) -> float:
 
 
 def ms_analyze(bars: List[MSBar], at: int, s: MSState, window: int = 96):
-    """Full Market Structure Analysis for bar `at` (exact port of MSAnalyze)."""
+    """Full Market Structure Analysis for bar `at` (exact port of MSAnalyze from StructureCore.mqh)."""
     ms_clear(s)
     if at < window + 23 or bars[at].scale <= 0:
         return
@@ -492,7 +492,7 @@ class SpikebotAnalyzer:
             self.p2_bars = convert_raw_candles(p2_raw, self.p2_minutes)
 
     def analyze_latest(self) -> Dict[str, Any]:
-        """Compute the latest structure state and confluence entry signal."""
+        """Compute the latest structure state and confluence entry signal matching MT5 Spikebot."""
         n = len(self.local_bars)
         if n < self.structure_window + 23:
             return {
@@ -503,46 +503,63 @@ class SpikebotAnalyzer:
                 "contract_type": "MULTUP" if self.spike_direction == 1 else "MULTDOWN"
             }
 
-        at = n - 1
-        ms_analyze(self.local_bars, at, self.local_state, self.structure_window)
+        # In MT5 Spikebot.mq5, local contains closed bars (rates_total - 2).
+        # When self.local_bars contains the unclosed forming bar at index -1,
+        # the latest completed closed bar is at closed_at = n - 2.
+        closed_at = n - 2 if n >= 2 else n - 1
+        forming_at = n - 1
 
-        # Parent 1 analysis
-        na = len(self.p1_bars)
-        if na > 0:
-            ia = ms_closed_index(self.p1_bars, self.local_bars[at].end)
-            if ia >= 0:
-                ms_analyze(self.p1_bars, ia, self.p1_state, self.structure_window)
+        # 1. Closed Bar Analysis (exact MT5 setup confirmation on bar close)
+        closed_state = MSState()
+        ms_analyze(self.local_bars, closed_at, closed_state, self.structure_window)
 
-        # Parent 2 analysis
-        nb = len(self.p2_bars)
-        if nb > 0:
-            ib = ms_closed_index(self.p2_bars, self.local_bars[at].end)
-            if ib >= 0:
-                ms_analyze(self.p2_bars, ib, self.p2_state, self.structure_window)
+        closed_p1_state = MSState()
+        closed_p2_state = MSState()
+        if len(self.p1_bars) > 0:
+            ia_c = ms_closed_index(self.p1_bars, self.local_bars[closed_at].end)
+            if ia_c >= 0:
+                ms_analyze(self.p1_bars, ia_c, closed_p1_state, self.structure_window)
 
-        parent_count = (1 if na > 0 else 0) + (1 if nb > 0 else 0)
+        if len(self.p2_bars) > 0:
+            ib_c = ms_closed_index(self.p2_bars, self.local_bars[closed_at].end)
+            if ib_c >= 0:
+                ms_analyze(self.p2_bars, ib_c, closed_p2_state, self.structure_window)
 
-        # Evaluate confluence
+        parent_count = (1 if len(self.p1_bars) > 0 else 0) + (1 if len(self.p2_bars) > 0 else 0)
+
+        # Evaluate confluence on the closed bar
         if self.signal_mode == "aligned_structure":
             signal_confirmed = ms_confluence(
-                self.local_state, self.p1_state, self.p2_state, parent_count, self.spike_direction
+                closed_state, closed_p1_state, closed_p2_state, parent_count, self.spike_direction
             )
         else:
-            # "active_structure" (default)
+            # "active_structure" (default MT5 mode)
             signal_confirmed = sb_active_confluence(
-                self.local_state, self.p1_state, self.p2_state, parent_count, self.spike_direction
+                closed_state, closed_p1_state, closed_p2_state, parent_count, self.spike_direction
             )
 
         contract_type = "MULTUP" if self.spike_direction == 1 else "MULTDOWN"
         entry_signal = self.spike_direction if signal_confirmed else 0
 
+        # 2. Live Forming Bar Analysis (for real-time HUD, support, resistance, forming retest zone)
+        ms_analyze(self.local_bars, forming_at, self.local_state, self.structure_window)
+        if len(self.p1_bars) > 0:
+            ia = ms_closed_index(self.p1_bars, self.local_bars[forming_at].end)
+            if ia >= 0:
+                ms_analyze(self.p1_bars, ia, self.p1_state, self.structure_window)
+
+        if len(self.p2_bars) > 0:
+            ib = ms_closed_index(self.p2_bars, self.local_bars[forming_at].end)
+            if ib >= 0:
+                ms_analyze(self.p2_bars, ib, self.p2_state, self.structure_window)
+
         # Compute visual chart markers (SH, SL, BOS, CHoCH, BUY, SELL)
         markers = compute_structure_markers(self.local_bars, self.spike_direction)
-        if signal_confirmed and self.local_bars:
-            latest_time = self.local_bars[-1].time
+        if signal_confirmed and len(self.local_bars) >= 2:
+            signal_time = self.local_bars[closed_at].time
             if self.spike_direction == 1:
                 markers.append({
-                    "time": latest_time,
+                    "time": signal_time,
                     "position": "belowBar",
                     "color": "#22c55e",
                     "shape": "arrowUp",
@@ -551,7 +568,7 @@ class SpikebotAnalyzer:
                 })
             else:
                 markers.append({
-                    "time": latest_time,
+                    "time": signal_time,
                     "position": "aboveBar",
                     "color": "#ef4444",
                     "shape": "arrowDown",
@@ -571,29 +588,30 @@ class SpikebotAnalyzer:
         p1_dir = "UP" if self.p1_state.direction > 0 else ("DOWN" if self.p1_state.direction < 0 else "NEUTRAL")
         p2_dir = "UP" if self.p2_state.direction > 0 else ("DOWN" if self.p2_state.direction < 0 else "NEUTRAL")
 
-        # Ensure structural stop loss and target are always accurately derived from market structure
-        s_stop = float(self.local_state.stop)
-        s_target = float(self.local_state.target)
-        curr_price = float(self.local_bars[-1].close) if self.local_bars else 0.0
-        unit_scale = float(self.local_bars[-1].scale) if self.local_bars else 1.0
+        # If entry is confirmed on closed bar, use exact closed setup entry price, stop, target
+        if signal_confirmed and closed_state.entry != 0:
+            entry_price = float(closed_state.entry_price)
+            s_stop = float(closed_state.stop)
+            s_target = float(closed_state.target)
+        else:
+            entry_price = float(self.local_bars[-1].close) if self.local_bars else 0.0
+            s_stop = float(self.local_state.stop)
+            s_target = float(self.local_state.target)
+            unit_scale = float(self.local_bars[-1].scale) if self.local_bars else 1.0
 
-        if s_stop <= 0 and curr_price > 0:
-            if self.spike_direction == 1:
-                # Bullish stop is invalidation level below entry, or swing support
-                s_stop = self.local_state.invalidation if self.local_state.invalidation > 0 else (self.local_state.support if self.local_state.support > 0 else curr_price - 2.0 * unit_scale)
-            else:
-                # Bearish stop is invalidation level above entry, or swing resistance
-                s_stop = self.local_state.invalidation if self.local_state.invalidation > 0 else (self.local_state.resistance if self.local_state.resistance > 0 else curr_price + 2.0 * unit_scale)
+            if s_stop <= 0 and entry_price > 0:
+                if self.spike_direction == 1:
+                    s_stop = self.local_state.invalidation if self.local_state.invalidation > 0 else (self.local_state.support if self.local_state.support > 0 else entry_price - 2.0 * unit_scale)
+                else:
+                    s_stop = self.local_state.invalidation if self.local_state.invalidation > 0 else (self.local_state.resistance if self.local_state.resistance > 0 else entry_price + 2.0 * unit_scale)
 
-        if s_target <= 0 and curr_price > 0:
-            if self.spike_direction == 1:
-                # Bullish target is opposing swing resistance, or 2x structural risk
-                risk = max(curr_price - s_stop, unit_scale) if s_stop > 0 else unit_scale
-                s_target = self.local_state.resistance if (self.local_state.resistance > curr_price) else curr_price + 2.0 * risk
-            else:
-                # Bearish target is opposing swing support, or 2x structural risk
-                risk = max(s_stop - curr_price, unit_scale) if s_stop > 0 else unit_scale
-                s_target = self.local_state.support if (self.local_state.support > 0 and self.local_state.support < curr_price) else curr_price - 2.0 * risk
+            if s_target <= 0 and entry_price > 0:
+                if self.spike_direction == 1:
+                    risk = max(entry_price - s_stop, unit_scale) if s_stop > 0 else unit_scale
+                    s_target = self.local_state.resistance if (self.local_state.resistance > entry_price) else entry_price + 2.0 * risk
+                else:
+                    risk = max(s_stop - entry_price, unit_scale) if s_stop > 0 else unit_scale
+                    s_target = self.local_state.support if (self.local_state.support > 0 and self.local_state.support < entry_price) else entry_price - 2.0 * risk
 
         return {
             "symbol": self.symbol,
@@ -613,13 +631,14 @@ class SpikebotAnalyzer:
             "invalidation": self.local_state.invalidation,
             "retest_age": self.local_state.retest_age,
             "retracement": self.local_state.retracement if self.local_state.retracement != -999.0 else None,
-            "entry_price": self.local_state.entry_price or curr_price,
+            "entry_price": entry_price,
             "stop": s_stop,
             "target": s_target,
             "parent1": {"tf": f"{self.p1_minutes}m", "ready": bool(self.p1_state.ready), "dir": p1_dir},
             "parent2": {"tf": f"{self.p2_minutes}m", "ready": bool(self.p2_state.ready), "dir": p2_dir},
             "confluence_mode": self.signal_mode,
             "signal_confirmed": signal_confirmed,
+            "closed_entry_bar_time": self.local_bars[closed_at].time if signal_confirmed else None,
             "reason": "setup_confirmed" if signal_confirmed else ("waiting_for_retest" if self.local_state.zone_active else "waiting_for_structure_break"),
             "markers": markers
         }

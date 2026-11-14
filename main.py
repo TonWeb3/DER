@@ -924,10 +924,13 @@ async def get_candles(symbol: str, tf: int = 5):
         return c
 
     if deriv.connected:
-        raw = await deriv.fetch_seed_candles(sym, count=300, granularity=tf * 60)
-        if raw:
-            sym_st.candles[tf] = raw
-            return raw
+        try:
+            raw = await asyncio.wait_for(deriv.fetch_seed_candles(sym, count=300, granularity=tf * 60), timeout=2.5)
+            if raw:
+                sym_st.candles[tf] = raw
+                return raw
+        except Exception:
+            pass
 
     preview = generate_preview_candles(sym, count=150, granularity=tf * 60)
     sym_st.candles[tf] = preview

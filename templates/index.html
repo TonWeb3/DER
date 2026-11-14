@@ -443,6 +443,7 @@
         priceLines: [],
         markersPrimitive: null,
         currentMarkers: [],
+        currentCandles: [],
 
         chartLoading: false,
         candlesLoaded: false,
@@ -631,8 +632,10 @@
           this.activeChartSymbol = symbol;
           this.activeChartTf = newTf;
           this.candlesLoaded = false;
+          this.chartLoading = true;
           this.currentMarkers = [];
 
+          // 1. Remove all existing price lines
           if (this.priceLines && this.priceLines.length) {
             for (const pl of this.priceLines) {
               try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
@@ -640,12 +643,24 @@
           }
           this.priceLines = [];
 
+          // 2. Clear markers
           try {
             if (this.markersPrimitive && typeof this.markersPrimitive.setMarkers === 'function') {
               this.markersPrimitive.setMarkers([]);
             }
             if (typeof this.candlestickSeries.setMarkers === 'function') {
               this.candlestickSeries.setMarkers([]);
+            }
+          } catch (e) {}
+
+          // 3. Clear candlestick series and reset price scale autoScale
+          try {
+            if (this.candlestickSeries) {
+              this.candlestickSeries.setData([]);
+              this.candlestickSeries.applyOptions({ autoScale: true });
+            }
+            if (this.chart) {
+              this.chart.priceScale('right').applyOptions({ autoScale: true });
             }
           } catch (e) {}
 
@@ -663,7 +678,7 @@
         },
 
         updateChartIndicators(explicitLevels = null) {
-          if (!this.candlestickSeries) return;
+          if (!this.candlestickSeries || !this.candlesLoaded) return;
           if (this.priceLines && this.priceLines.length) {
             for (const pl of this.priceLines) {
               try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
@@ -896,6 +911,11 @@
                 }
               }
               if (deduped.length) {
+                // Ignore stale response if user switched away while fetch was in flight
+                if (this.activeChartSymbol !== symbol || this.activeChartTf !== tf) {
+                  return;
+                }
+
                 if (this.priceLines && this.priceLines.length) {
                   for (const pl of this.priceLines) {
                     try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
@@ -903,14 +923,23 @@
                 }
                 this.priceLines = [];
 
+                this.currentCandles = deduped;
                 this.candlestickSeries.setData(deduped);
-                this.chart.timeScale().fitContent();
+                this.candlestickSeries.applyOptions({ autoScale: true });
+                if (this.chart) {
+                  this.chart.priceScale('right').applyOptions({ autoScale: true });
+                  this.chart.timeScale().fitContent();
+                }
                 this.candlesLoaded = true;
                 this.candlesCount = deduped.length;
+                this.chartLoading = false;
 
                 try {
                   const indRes = await fetch(`/api/indicator/${symbol}?tf=${tf}`);
                   const indData = await indRes.json();
+                  if (this.activeChartSymbol !== symbol || this.activeChartTf !== tf) {
+                    return;
+                  }
                   if (Array.isArray(indData.markers)) {
                     const candleTimes = new Set(deduped.map(c => c.time));
                     const validMarkers = indData.markers.filter(m => candleTimes.has(m.time));
@@ -927,12 +956,14 @@
           } catch (e) {
             console.error('loadCandles error:', e);
           } finally {
-            this.chartLoading = false;
+            if (this.activeChartSymbol === symbol && this.activeChartTf === tf) {
+              this.chartLoading = false;
+            }
           }
         },
 
         updateChartRealtime() {
-          if (!this.candlestickSeries || !this.data.symbols) return;
+          if (!this.candlestickSeries || !this.data.symbols || !this.candlesLoaded || this.chartLoading) return;
           const symData = this.data.symbols[this.activeChartSymbol];
           if (!symData) return;
 
@@ -943,6 +974,12 @@
           const t = Math.floor(Number(b.openTime) / 1000);
           if (!t || isNaN(t)) return;
 
+          // Prevent pushing bar if last candle in series has a newer time
+          if (this.currentCandles && this.currentCandles.length) {
+            const lastT = this.currentCandles[this.currentCandles.length - 1].time;
+            if (t < lastT) return;
+          }
+
           const candle = {
             time: t,
             open: Number(b.open),
@@ -952,6 +989,14 @@
           };
           try {
             this.candlestickSeries.update(candle);
+            if (this.currentCandles && this.currentCandles.length) {
+              const lastIdx = this.currentCandles.length - 1;
+              if (this.currentCandles[lastIdx].time === t) {
+                this.currentCandles[lastIdx] = candle;
+              } else if (t > this.currentCandles[lastIdx].time) {
+                this.currentCandles.push(candle);
+              }
+            }
           } catch (e) {}
         },
 

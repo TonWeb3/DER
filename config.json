@@ -10,27 +10,25 @@
       "CRASH1000"
     ],
     "currency": "USD",
-    "multiplier": 300,
-    "timeframe_minutes": 5,
     "risk_type": "percent",
-    "risk_value": 2.0,
-    "max_open_trades_per_symbol": 1
+    "risk_value": 2,
+    "max_open_trades_per_symbol": 4
+  },
+  "timeframe_multiplier_map": {
+    "1": 500,
+    "2": 400,
+    "5": 300,
+    "15": 200
   },
   "supported_symbols": [
     "BOOM1000",
     "CRASH1000"
-  ],
-  "supported_multipliers": [
-    100,
-    200,
-    300,
-    400,
-    500
   ],
   "supported_timeframes": [
     1,
     2,
     5,
     15
-  ]
+  ],
+  "strategy": "active_structure"
 }

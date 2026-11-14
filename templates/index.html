@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spikebot 3.00 — Market Structure Multipliers</title>
+    <title>Spikebot 3.00 — Multi-Timeframe Multipliers</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- Lightweight Charts: local bundle with CDN fallback -->
@@ -33,11 +33,11 @@
           <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
             Spikebot 3.00
             <span class="text-amber-400 text-xs font-bold uppercase tracking-wider bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded">
-              Structure Atlas
+              Multi-TF Atlas
             </span>
           </h1>
           <p class="text-xs text-slate-400">
-            Confirmed Swings · BOS/CHoCH · Role-Reversal Retest · Closed-Parent Confluence
+            Concurrent Scans (1m · 2m · 5m · 15m) · Dynamic Multipliers · Independent SL/TP
           </p>
         </div>
       </div>
@@ -87,29 +87,23 @@
       <a href="/settings" class="underline text-amber-300 font-bold ml-2">Configure Settings &rarr;</a>
     </div>
 
-    <!-- Active Multiplier & Mode Banner -->
+    <!-- Multi-Timeframe Leverage Mapping Banner -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
       <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
-        <span class="text-slate-400 text-[10px] uppercase font-bold">Multiplier Leverage</span>
-        <div class="text-lg font-black text-amber-400 font-mono mt-0.5" x-text="(data.trading_state?.multiplier || 100)+'x'"></div>
+        <span class="text-slate-400 text-[10px] uppercase font-bold">1m Leverage</span>
+        <div class="text-lg font-black text-amber-400 font-mono mt-0.5">500x <span class="text-[10px] font-normal text-slate-400">(Parents 5m/15m)</span></div>
       </div>
       <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
-        <span class="text-slate-400 text-[10px] uppercase font-bold">Strategy Engine</span>
-        <div class="text-sm font-bold text-emerald-300 mt-1 uppercase flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span>Active Structure ⚡</span>
-        </div>
+        <span class="text-slate-400 text-[10px] uppercase font-bold">2m Leverage</span>
+        <div class="text-lg font-black text-amber-400 font-mono mt-0.5">400x <span class="text-[10px] font-normal text-slate-400">(Parents 10m/30m)</span></div>
       </div>
       <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
-        <span class="text-slate-400 text-[10px] uppercase font-bold">Risk Per Trade</span>
-        <div class="text-sm font-bold text-slate-200 font-mono mt-1" x-text="(data.trading_state?.risk?.type==='percent' ? (data.trading_state.risk.value+'% of balance') : ('$'+data.trading_state?.risk?.value))"></div>
+        <span class="text-slate-400 text-[10px] uppercase font-bold">5m Leverage</span>
+        <div class="text-lg font-black text-amber-400 font-mono mt-0.5">300x <span class="text-[10px] font-normal text-slate-400">(Parents 15m/1h)</span></div>
       </div>
       <div class="bg-[#09222c] p-3 rounded-lg border border-[#133c4a]">
-        <span class="text-slate-400 text-[10px] uppercase font-bold">TP / SL Mode</span>
-        <div class="text-sm font-bold text-cyan-300 font-mono mt-1 flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-          <span>Structural Only ⚡</span>
-        </div>
+        <span class="text-slate-400 text-[10px] uppercase font-bold">15m Leverage</span>
+        <div class="text-lg font-black text-amber-400 font-mono mt-0.5">200x <span class="text-[10px] font-normal text-slate-400">(Parents 1h/4h)</span></div>
       </div>
     </div>
 
@@ -118,137 +112,144 @@
       
       <!-- BOOM 1000 Card -->
       <div class="bg-[#09222c] p-4 rounded-xl border border-[#133c4a] relative overflow-hidden transition"
-           :class="activeChartSymbol==='BOOM1000' ? 'ring-2 ring-cyan-500 bg-[#0d2a37]' : ''">
+           :class="activeChartSymbol==='BOOM1000' ? 'ring-2 ring-emerald-500 bg-[#0d2a37]' : ''">
         <div class="flex justify-between items-start mb-2">
           <div class="flex items-center gap-2">
             <span class="text-xl">🚀</span>
             <div>
               <h2 class="text-lg font-black text-emerald-400 flex items-center gap-2">
                 BOOM 1000
-                <span class="text-[10px] font-bold bg-emerald-950/70 border border-emerald-800 text-emerald-300 px-1.5 py-0.5 rounded">MULTUP</span>
+                <span class="text-[10px] font-bold bg-emerald-950/70 border border-emerald-800 text-emerald-300 px-1.5 py-0.5 rounded">STRICTLY MULTUP</span>
               </h2>
-              <p class="text-[10px] text-slate-400">Bullish structure break &amp; retest &rarr; MULTUP</p>
+              <p class="text-[10px] text-slate-400">Scans all timeframes. Bullish retests enter MULTUP to catch spikes.</p>
             </div>
           </div>
-          <button @click="switchChart('BOOM1000')" class="px-2.5 py-1 text-[11px] font-bold rounded border transition"
-                  :class="activeChartSymbol==='BOOM1000' ? 'bg-cyan-600 border-cyan-500 text-white':'bg-[#103442] border-[#1d4c5e] text-slate-300 hover:text-white'">
-            <span x-text="activeChartSymbol==='BOOM1000' ? '● Chart Active' : 'Show Chart'"></span>
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 my-2.5 bg-[#06171f] p-3 rounded-lg border border-[#113745] text-xs">
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Spot Price</span>
-            <div class="text-xl font-black font-mono text-white mt-0.5" x-text="symSpot('BOOM1000')"></div>
-          </div>
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Trend</span>
-            <div class="text-sm font-bold font-mono mt-1" :class="symDirClass('BOOM1000')" x-text="symDir('BOOM1000')"></div>
-          </div>
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Break</span>
-            <div class="text-xs font-bold font-mono text-slate-200 mt-0.5" x-text="symBreak('BOOM1000')"></div>
-          </div>
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Retest Zone</span>
-            <div class="text-xs font-bold font-mono mt-0.5" :class="symZoneClass('BOOM1000')" x-text="symZoneText('BOOM1000')"></div>
-          </div>
-        </div>
-
-        <div class="flex justify-between items-center text-xs text-slate-300">
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400">Support / Resistance:</span>
-            <span class="font-mono font-bold text-emerald-400" x-text="'S '+symSupport('BOOM1000')"></span>
-            <span class="text-slate-500">·</span>
-            <span class="font-mono font-bold text-rose-400" x-text="'R '+symResistance('BOOM1000')"></span>
+            <span class="text-xs font-mono font-bold text-white bg-[#06171f] px-2.5 py-1 rounded border border-[#133c4a]" x-text="symSpot('BOOM1000')"></span>
+            <button @click="switchChart('BOOM1000', activeChartTf)" class="px-2.5 py-1 text-[11px] font-bold rounded border transition"
+                    :class="activeChartSymbol==='BOOM1000' ? 'bg-emerald-600 border-emerald-500 text-white':'bg-[#103442] border-[#1d4c5e] text-slate-300 hover:text-white'">
+              <span x-text="activeChartSymbol==='BOOM1000' ? '● Chart Active' : 'Show Chart'"></span>
+            </button>
           </div>
-          <div class="font-bold text-[11px]" :class="symSignalConfirmed('BOOM1000') ? 'text-emerald-400 font-black' : 'text-slate-400'">
-            <span x-text="symSignalConfirmed('BOOM1000') ? '⚡ SETUP CONFIRMED (BUY)' : 'Awaiting Retest'"></span>
+        </div>
+
+        <!-- Timeframe Grid for BOOM1000 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 my-2.5 text-xs">
+          <template x-for="tf in [1, 2, 5, 15]" :key="tf">
+            <div @click="switchChart('BOOM1000', tf)"
+                 class="p-2 rounded-lg border cursor-pointer transition flex flex-col justify-between"
+                 :class="(activeChartSymbol==='BOOM1000' && activeChartTf===tf) ? 'bg-[#0f3444] border-emerald-400 ring-1 ring-emerald-400/50' : 'bg-[#06171f] border-[#113745] hover:border-slate-500'">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-slate-200" x-text="tf+'m'"></span>
+                <span class="text-[10px] font-mono text-amber-300 font-bold" x-text="tfMultiplier(tf)+'x'"></span>
+              </div>
+              <div class="text-[11px] font-bold mt-1" :class="tfSignalConfirmed('BOOM1000', tf) ? 'text-emerald-400 pulse-dot' : tfDirClass('BOOM1000', tf)"
+                   x-text="tfSignalConfirmed('BOOM1000', tf) ? 'BUY ⚡' : tfDir('BOOM1000', tf)"></div>
+              <div class="text-[9px] text-slate-400 truncate mt-0.5" x-text="tfBreak('BOOM1000', tf)"></div>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex justify-between items-center text-xs text-slate-300 pt-1">
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Open Trades:</span>
+            <span class="font-mono font-bold text-white" x-text="symOpenTrades('BOOM1000') + '/' + (data.trading_state?.max_open_trades_per_symbol || 2)"></span>
+          </div>
+          <div class="text-[11px] text-slate-400 font-mono">
+            <span x-text="'Active Chart View: ' + (activeChartSymbol==='BOOM1000' ? activeChartTf+'m' : '5m')"></span>
           </div>
         </div>
       </div>
 
       <!-- CRASH 1000 Card -->
       <div class="bg-[#09222c] p-4 rounded-xl border border-[#133c4a] relative overflow-hidden transition"
-           :class="activeChartSymbol==='CRASH1000' ? 'ring-2 ring-cyan-500 bg-[#0d2a37]' : ''">
+           :class="activeChartSymbol==='CRASH1000' ? 'ring-2 ring-rose-500 bg-[#0d2a37]' : ''">
         <div class="flex justify-between items-start mb-2">
           <div class="flex items-center gap-2">
             <span class="text-xl">📉</span>
             <div>
               <h2 class="text-lg font-black text-rose-400 flex items-center gap-2">
                 CRASH 1000
-                <span class="text-[10px] font-bold bg-rose-950/70 border border-rose-800 text-rose-300 px-1.5 py-0.5 rounded">MULTDOWN</span>
+                <span class="text-[10px] font-bold bg-rose-950/70 border border-rose-800 text-rose-300 px-1.5 py-0.5 rounded">STRICTLY MULTDOWN</span>
               </h2>
-              <p class="text-[10px] text-slate-400">Bearish structure break &amp; retest &rarr; MULTDOWN</p>
+              <p class="text-[10px] text-slate-400">Scans all timeframes. Bearish retests enter MULTDOWN to catch crashes.</p>
             </div>
           </div>
-          <button @click="switchChart('CRASH1000')" class="px-2.5 py-1 text-[11px] font-bold rounded border transition"
-                  :class="activeChartSymbol==='CRASH1000' ? 'bg-cyan-600 border-cyan-500 text-white':'bg-[#103442] border-[#1d4c5e] text-slate-300 hover:text-white'">
-            <span x-text="activeChartSymbol==='CRASH1000' ? '● Chart Active' : 'Show Chart'"></span>
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 my-2.5 bg-[#06171f] p-3 rounded-lg border border-[#113745] text-xs">
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Spot Price</span>
-            <div class="text-xl font-black font-mono text-white mt-0.5" x-text="symSpot('CRASH1000')"></div>
-          </div>
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Trend</span>
-            <div class="text-sm font-bold font-mono mt-1" :class="symDirClass('CRASH1000')" x-text="symDir('CRASH1000')"></div>
-          </div>
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Structure Break</span>
-            <div class="text-xs font-bold font-mono text-slate-200 mt-0.5" x-text="symBreak('CRASH1000')"></div>
-          </div>
-          <div>
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Retest Zone</span>
-            <div class="text-xs font-bold font-mono mt-0.5" :class="symZoneClass('CRASH1000')" x-text="symZoneText('CRASH1000')"></div>
-          </div>
-        </div>
-
-        <div class="flex justify-between items-center text-xs text-slate-300">
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400">Support / Resistance:</span>
-            <span class="font-mono font-bold text-emerald-400" x-text="'S '+symSupport('CRASH1000')"></span>
-            <span class="text-slate-500">·</span>
-            <span class="font-mono font-bold text-rose-400" x-text="'R '+symResistance('CRASH1000')"></span>
+            <span class="text-xs font-mono font-bold text-white bg-[#06171f] px-2.5 py-1 rounded border border-[#133c4a]" x-text="symSpot('CRASH1000')"></span>
+            <button @click="switchChart('CRASH1000', activeChartTf)" class="px-2.5 py-1 text-[11px] font-bold rounded border transition"
+                    :class="activeChartSymbol==='CRASH1000' ? 'bg-rose-600 border-rose-500 text-white':'bg-[#103442] border-[#1d4c5e] text-slate-300 hover:text-white'">
+              <span x-text="activeChartSymbol==='CRASH1000' ? '● Chart Active' : 'Show Chart'"></span>
+            </button>
           </div>
-          <div class="font-bold text-[11px]" :class="symSignalConfirmed('CRASH1000') ? 'text-rose-400 font-black' : 'text-slate-400'">
-            <span x-text="symSignalConfirmed('CRASH1000') ? '⚡ SETUP CONFIRMED (SELL)' : 'Awaiting Retest'"></span>
+        </div>
+
+        <!-- Timeframe Grid for CRASH1000 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 my-2.5 text-xs">
+          <template x-for="tf in [1, 2, 5, 15]" :key="tf">
+            <div @click="switchChart('CRASH1000', tf)"
+                 class="p-2 rounded-lg border cursor-pointer transition flex flex-col justify-between"
+                 :class="(activeChartSymbol==='CRASH1000' && activeChartTf===tf) ? 'bg-[#0f3444] border-rose-400 ring-1 ring-rose-400/50' : 'bg-[#06171f] border-[#113745] hover:border-slate-500'">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-slate-200" x-text="tf+'m'"></span>
+                <span class="text-[10px] font-mono text-amber-300 font-bold" x-text="tfMultiplier(tf)+'x'"></span>
+              </div>
+              <div class="text-[11px] font-bold mt-1" :class="tfSignalConfirmed('CRASH1000', tf) ? 'text-rose-400 pulse-dot' : tfDirClass('CRASH1000', tf)"
+                   x-text="tfSignalConfirmed('CRASH1000', tf) ? 'SELL ⚡' : tfDir('CRASH1000', tf)"></div>
+              <div class="text-[9px] text-slate-400 truncate mt-0.5" x-text="tfBreak('CRASH1000', tf)"></div>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex justify-between items-center text-xs text-slate-300 pt-1">
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Open Trades:</span>
+            <span class="font-mono font-bold text-white" x-text="symOpenTrades('CRASH1000') + '/' + (data.trading_state?.max_open_trades_per_symbol || 2)"></span>
+          </div>
+          <div class="text-[11px] text-slate-400 font-mono">
+            <span x-text="'Active Chart View: ' + (activeChartSymbol==='CRASH1000' ? activeChartTf+'m' : '5m')"></span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Interactive Candlestick Chart Section with Symbol Switcher -->
+    <!-- Interactive Candlestick Chart Section with Symbol & Multi-Timeframe Switcher -->
     <div class="bg-[#09222c] rounded-xl border border-[#133c4a] overflow-hidden">
       <!-- Chart Controls Header -->
       <div class="p-3 sm:p-4 bg-[#0d2a37] border-b border-[#133c4a] flex flex-wrap justify-between items-center gap-3">
-        <div class="flex items-center gap-2">
-          <span class="text-xs uppercase font-bold text-slate-400">Chart:</span>
+        <div class="flex flex-wrap items-center gap-2">
           <!-- Symbol Switcher Tabs -->
           <div class="flex bg-[#06171f] p-1 rounded-lg border border-[#133c4a]">
-            <button @click="switchChart('BOOM1000')"
+            <button @click="switchChart('BOOM1000', activeChartTf)"
                     class="px-3 py-1 text-xs font-bold rounded-md transition flex items-center gap-1.5"
                     :class="activeChartSymbol==='BOOM1000' ? 'bg-emerald-600 text-white shadow':'text-slate-400 hover:text-white'">
               <span>🚀 BOOM 1000</span>
             </button>
-            <button @click="switchChart('CRASH1000')"
+            <button @click="switchChart('CRASH1000', activeChartTf)"
                     class="px-3 py-1 text-xs font-bold rounded-md transition flex items-center gap-1.5"
                     :class="activeChartSymbol==='CRASH1000' ? 'bg-rose-600 text-white shadow':'text-slate-400 hover:text-white'">
               <span>📉 CRASH 1000</span>
             </button>
           </div>
+
+          <!-- Timeframe Switcher Tabs -->
+          <div class="flex bg-[#06171f] p-1 rounded-lg border border-[#133c4a] text-xs font-bold font-mono">
+            <template x-for="tf in [1, 2, 5, 15]" :key="tf">
+              <button @click="switchChart(activeChartSymbol, tf)"
+                      class="px-2.5 py-1 rounded transition flex items-center gap-1"
+                      :class="activeChartTf===tf ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'">
+                <span x-text="tf+'m'"></span>
+                <span class="text-[9px] text-amber-300 font-bold" x-text="'(' + tfMultiplier(tf) + 'x)'"></span>
+              </button>
+            </template>
+          </div>
         </div>
 
         <div class="flex items-center gap-3">
-          <div class="text-xs text-slate-400 font-mono hidden sm:flex items-center gap-2">
+          <div class="text-xs text-slate-400 font-mono hidden md:flex items-center gap-2">
             <span>Spot: <b class="text-white font-bold" x-text="symSpot(activeChartSymbol)"></b></span>
             <span class="text-slate-600">|</span>
-            <span>TF: <b class="text-cyan-300" x-text="(data.trading_state?.timeframe_minutes || 5)+'m'"></b></span>
-            <span class="text-slate-600">|</span>
-            <span class="text-slate-400">Parents: <b class="text-amber-300" x-text="activeParentText()"></b></span>
+            <span>Parents: <b class="text-amber-300" x-text="activeParentText()"></b></span>
           </div>
 
           <!-- Indicator Toggle Badges -->
@@ -257,17 +258,17 @@
                     class="px-2.5 py-1 rounded transition flex items-center gap-1"
                     :class="showIndicatorLines ? 'bg-cyan-600 text-white shadow':'text-slate-400 hover:text-slate-200'">
               <span x-text="showIndicatorLines ? '✓' : '○'"></span>
-              <span>Levels (S/R/Zone)</span>
+              <span>Levels</span>
             </button>
             <button type="button" @click="toggleIndicator('markers')"
                     class="px-2.5 py-1 rounded transition flex items-center gap-1"
                     :class="showIndicatorMarkers ? 'bg-amber-600 text-white shadow':'text-slate-400 hover:text-slate-200'">
               <span x-text="showIndicatorMarkers ? '✓' : '○'"></span>
-              <span>Signals &amp; Breaks</span>
+              <span>Signals</span>
             </button>
           </div>
 
-          <button @click="loadCandles(activeChartSymbol)" title="Refresh Chart & Indicators"
+          <button @click="loadCandles(activeChartSymbol, activeChartTf)" title="Refresh Chart & Indicators"
                   class="bg-[#103442] hover:bg-[#1a4a5d] px-2.5 py-1 rounded text-xs text-slate-300 hover:text-white border border-[#1d4c5e]">
             ⟳
           </button>
@@ -277,14 +278,14 @@
       <!-- Chart Container -->
       <div class="p-2 sm:p-4 bg-[#051319] relative">
         <div x-show="chartLoading && !candlesCount" class="absolute inset-0 flex items-center justify-center bg-[#051319]/75 z-10 text-xs text-slate-400 font-mono">
-          <span class="pulse-dot mr-2 text-cyan-400">●</span> Loading <span class="font-bold text-white ml-1 mr-1" x-text="activeChartSymbol"></span> candles &amp; indicators...
+          <span class="pulse-dot mr-2 text-cyan-400">●</span> Loading <span class="font-bold text-white ml-1 mr-1" x-text="activeChartSymbol + ' ' + activeChartTf + 'm'"></span> candles &amp; indicators...
         </div>
 
         <div id="tv-chart" class="w-full h-80 sm:h-96 rounded-lg overflow-hidden"></div>
       </div>
     </div>
 
-    <!-- Active Trades & Positions Table with Close Action -->
+    <!-- Active Trades & Positions Table with Independent SL/TP Tracking -->
     <div class="bg-[#09222c] rounded-xl border border-[#133c4a] overflow-hidden">
       <div class="flex justify-between items-center bg-[#0d2a37] px-4 py-3 border-b border-[#133c4a]">
         <div class="flex items-center gap-2">
@@ -292,16 +293,16 @@
           <span class="bg-cyan-900/60 text-cyan-300 text-xs px-2 py-0.5 rounded-full font-mono font-bold"
                 x-text="data.trading_state?.active_trades?.length || 0"></span>
         </div>
-        <span class="text-[11px] text-slate-400">Live positions updated every second</span>
+        <span class="text-[11px] text-slate-400">Tracked independently per timeframe</span>
       </div>
 
       <div class="p-4 overflow-x-auto">
-        <table class="w-full text-left text-xs sm:text-sm min-w-[750px]">
+        <table class="w-full text-left text-xs sm:text-sm min-w-[850px]">
           <thead>
             <tr class="text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#133c4a]">
               <th class="py-2.5 px-3">Symbol</th>
+              <th class="py-2.5 px-3">Timeframe / Leverage</th>
               <th class="py-2.5 px-3">Contract</th>
-              <th class="py-2.5 px-3">Leverage</th>
               <th class="py-2.5 px-3">Stake</th>
               <th class="py-2.5 px-3">Entry Spot</th>
               <th class="py-2.5 px-3">Current Spot</th>
@@ -318,9 +319,12 @@
                   <span x-text="t.symbol==='BOOM1000'?'🚀':'📉'"></span>
                   <span x-text="t.symbol"></span>
                 </td>
+                <td class="py-3 px-3 font-mono">
+                  <span class="bg-amber-950/70 border border-amber-800 text-amber-300 font-bold px-2 py-0.5 rounded text-xs"
+                        x-text="(t.timeframe || 5) + 'm · ' + (t.multiplier || 300) + 'x'"></span>
+                </td>
                 <td class="py-3 px-3 font-bold" :class="t.contract_type==='MULTUP'?'text-emerald-400':'text-rose-400'"
                     x-text="t.contract_type==='MULTUP'?'MULTUP ↗':'MULTDOWN ↘'"></td>
-                <td class="py-3 px-3 font-mono font-bold text-amber-300" x-text="(t.multiplier || data.trading_state?.multiplier)+'x'"></td>
                 <td class="py-3 px-3 font-mono" x-text="'$'+Number(t.stake).toFixed(2)"></td>
                 <td class="py-3 px-3 font-mono text-slate-300" x-text="t.entry_spot != null ? Number(t.entry_spot).toFixed(3) : '—'"></td>
                 <td class="py-3 px-3 font-mono text-slate-300" x-text="t.current_spot != null ? Number(t.current_spot).toFixed(3) : '—'"></td>
@@ -372,12 +376,12 @@
       <div class="p-4">
         <!-- History Tab -->
         <div x-show="tab==='history'" class="overflow-x-auto">
-          <table class="w-full text-left text-xs sm:text-sm min-w-[550px]">
+          <table class="w-full text-left text-xs sm:text-sm min-w-[650px]">
             <thead>
               <tr class="text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#133c4a]">
                 <th class="py-2 px-3">Symbol</th>
+                <th class="py-2 px-3">Timeframe / Leverage</th>
                 <th class="py-2 px-3">Type</th>
-                <th class="py-2 px-3">Leverage</th>
                 <th class="py-2 px-3">Stake</th>
                 <th class="py-2 px-3">Net Profit / Loss</th>
                 <th class="py-2 px-3 text-right">Closed Time</th>
@@ -387,9 +391,9 @@
               <template x-for="t in tradeHistory" :key="t.contract_id || t.entry_time">
                 <tr class="border-b border-[#133c4a]/50">
                   <td class="py-2.5 px-3 font-bold text-white" x-text="t.symbol"></td>
+                  <td class="py-2.5 px-3 font-mono font-bold text-amber-300" x-text="(t.timeframe || 5) + 'm · ' + (t.multiplier || 300) + 'x'"></td>
                   <td class="py-2.5 px-3 font-bold" :class="t.contract_type==='MULTUP'?'text-emerald-400':'text-rose-400'"
                       x-text="t.contract_type"></td>
-                  <td class="py-2.5 px-3 font-mono font-bold text-amber-300" x-text="(t.multiplier || 100)+'x'"></td>
                   <td class="py-2.5 px-3 font-mono" x-text="'$'+Number(t.stake).toFixed(2)"></td>
                   <td class="py-2.5 px-3 font-bold font-mono" :class="t.profit_loss > 0 ? 'text-emerald-400':'text-rose-400'"
                       x-text="(t.profit_loss > 0 ? '+' : '') + '$' + Number(t.profit_loss).toFixed(2)"></td>
@@ -409,7 +413,7 @@
           <div class="bg-black/80 rounded-lg p-3 h-64 overflow-y-auto font-mono text-[11px] border border-[#133c4a] text-slate-300 space-y-1">
             <template x-for="l in logs" :key="l">
               <div class="border-b border-slate-900 pb-0.5"
-                   :class="l.includes('WIN') || l.includes('SETUP') ? 'text-emerald-400' : (l.includes('LOSS') || l.includes('failed') ? 'text-rose-400' : 'text-slate-300')"
+                   :class="l.includes('WIN') || l.includes('ENTERED') || l.includes('SETUP') ? 'text-emerald-400' : (l.includes('LOSS') || l.includes('failed') ? 'text-rose-400' : 'text-slate-300')"
                    x-text="l"></div>
             </template>
             <div x-show="!logs.length" class="text-slate-600 italic">Listening for activity...</div>
@@ -431,6 +435,7 @@
         botBusy: false,
         suppress: 0,
         activeChartSymbol: 'BOOM1000',
+        activeChartTf: 5,
         chart: null,
         candlestickSeries: null,
         showIndicatorLines: true,
@@ -444,6 +449,11 @@
         candlesCount: 0,
         ws: null,
         wsConnected: false,
+
+        tfMultiplier(tf) {
+          const map = { 1: 500, 2: 400, 5: 300, 15: 200 };
+          return map[tf] || 300;
+        },
 
         async init() {
           this.$nextTick(() => {
@@ -497,14 +507,15 @@
                 }
                 this.updateChartRealtime();
                 this.updateChartIndicators();
-                const liveMarkers = this.data.symbols?.[this.activeChartSymbol]?.analysis?.markers;
+                const tfData = this.data.symbols?.[this.activeChartSymbol]?.timeframes?.[String(this.activeChartTf)];
+                const liveMarkers = tfData?.analysis?.markers;
                 if (Array.isArray(liveMarkers) && liveMarkers.length) {
                   this.applyMarkers(liveMarkers);
                 }
               } else if (msg.type === 'log') {
                 if (msg.line) {
                   this.logs.unshift(msg.line);
-                  if (this.logs.length > 150) this.logs.pop();
+                  if (this.logs.length > 200) this.logs.pop();
                 }
               }
             } catch (e) {
@@ -538,18 +549,6 @@
             }
             this.updateChartRealtime();
             this.updateChartIndicators();
-            const liveMarkers = this.data.symbols?.[this.activeChartSymbol]?.analysis?.markers;
-            if (Array.isArray(liveMarkers) && liveMarkers.length) {
-              this.applyMarkers(liveMarkers);
-            }
-          } catch (e) {}
-        },
-
-        async refreshLogs() {
-          if (this.tab !== 'logs') return;
-          try {
-            const res = await fetch('/api/logs');
-            this.logs = (await res.json()).reverse();
           } catch (e) {}
         },
 
@@ -623,16 +622,17 @@
             });
           }
 
-          this.loadCandles(this.activeChartSymbol);
+          this.loadCandles(this.activeChartSymbol, this.activeChartTf);
         },
 
-        async switchChart(symbol) {
-          if (this.activeChartSymbol === symbol && this.candlesLoaded) return;
+        async switchChart(symbol, tf = null) {
+          const newTf = tf !== null ? Number(tf) : this.activeChartTf;
+          if (this.activeChartSymbol === symbol && this.activeChartTf === newTf && this.candlesLoaded) return;
           this.activeChartSymbol = symbol;
+          this.activeChartTf = newTf;
           this.candlesLoaded = false;
           this.currentMarkers = [];
 
-          // Immediately remove old price lines so scale adjusts cleanly to new asset price range
           if (this.priceLines && this.priceLines.length) {
             for (const pl of this.priceLines) {
               try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
@@ -640,7 +640,6 @@
           }
           this.priceLines = [];
 
-          // Immediately clear markers
           try {
             if (this.markersPrimitive && typeof this.markersPrimitive.setMarkers === 'function') {
               this.markersPrimitive.setMarkers([]);
@@ -650,7 +649,7 @@
             }
           } catch (e) {}
 
-          await this.loadCandles(symbol);
+          await this.loadCandles(symbol, newTf);
         },
 
         toggleIndicator(type) {
@@ -665,7 +664,6 @@
 
         updateChartIndicators(explicitLevels = null) {
           if (!this.candlestickSeries) return;
-          // Clear previous price lines
           if (this.priceLines && this.priceLines.length) {
             for (const pl of this.priceLines) {
               try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
@@ -674,7 +672,8 @@
           this.priceLines = [];
           if (!this.showIndicatorLines) return;
 
-          const a = explicitLevels || this.data.symbols?.[this.activeChartSymbol]?.analysis;
+          const tfData = this.data.symbols?.[this.activeChartSymbol]?.timeframes?.[String(this.activeChartTf)];
+          const a = explicitLevels || tfData?.analysis || this.data.symbols?.[this.activeChartSymbol]?.analysis;
           if (!a) return;
           const LS = (typeof LightweightCharts !== 'undefined' && LightweightCharts.LineStyle)
             ? LightweightCharts.LineStyle
@@ -689,7 +688,7 @@
                 lineWidth: 2,
                 lineStyle: LS.Solid,
                 axisLabelVisible: true,
-                title: 'SUPPORT'
+                title: 'SUPPORT (' + this.activeChartTf + 'm)'
               }));
             } catch (e) {}
           }
@@ -703,12 +702,12 @@
                 lineWidth: 2,
                 lineStyle: LS.Solid,
                 axisLabelVisible: true,
-                title: 'RESISTANCE'
+                title: 'RESISTANCE (' + this.activeChartTf + 'm)'
               }));
             } catch (e) {}
           }
 
-          // 3. Retest Zone Mid / Entry (Yellow)
+          // 3. Retest Zone Mid
           if (a.zone_mid && Number(a.zone_mid) > 0) {
             try {
               this.priceLines.push(this.candlestickSeries.createPriceLine({
@@ -717,11 +716,10 @@
                 lineWidth: 1,
                 lineStyle: LS.Solid,
                 axisLabelVisible: true,
-                title: a.zone_active ? 'ZONE RETEST (ACTIVE)' : 'ZONE MID'
+                title: a.zone_active ? 'ZONE MID (' + a.retest_age + '/12)' : 'ZONE MID'
               }));
             } catch (e) {}
 
-            // Retest Zone High (Amber Dashed)
             if (a.zone_high && Number(a.zone_high) > Number(a.zone_mid)) {
               try {
                 this.priceLines.push(this.candlestickSeries.createPriceLine({
@@ -735,7 +733,6 @@
               } catch (e) {}
             }
 
-            // Retest Zone Low (Amber Dashed)
             if (a.zone_low && Number(a.zone_low) < Number(a.zone_mid)) {
               try {
                 this.priceLines.push(this.candlestickSeries.createPriceLine({
@@ -750,33 +747,95 @@
             }
           }
 
-          // 4. Structural Invalidation / Stop
-          const st = a.stop || a.invalidation;
-          if (st && Number(st) > 0) {
-            try {
-              this.priceLines.push(this.candlestickSeries.createPriceLine({
-                price: Number(st),
-                color: '#ef4444',
-                lineWidth: 1,
-                lineStyle: LS.Dotted,
-                axisLabelVisible: true,
-                title: 'STOP / INVALID'
-              }));
-            } catch (e) {}
-          }
+          // 4. Open Active Trade Lines (Takes Priority on Chart)
+          const openTrade = (this.data.trading_state?.active_trades || []).find(
+            t => t.symbol === this.activeChartSymbol && Number(t.timeframe) === Number(this.activeChartTf)
+          );
 
-          // 5. Structural Target
-          if (a.target && Number(a.target) > 0) {
-            try {
-              this.priceLines.push(this.candlestickSeries.createPriceLine({
-                price: Number(a.target),
-                color: '#06b6d4',
-                lineWidth: 1,
-                lineStyle: LS.Dotted,
-                axisLabelVisible: true,
-                title: 'TARGET'
-              }));
-            } catch (e) {}
+          if (openTrade) {
+            // Plot Open Trade's Entry Price
+            if (openTrade.entry_spot && Number(openTrade.entry_spot) > 0) {
+              try {
+                this.priceLines.push(this.candlestickSeries.createPriceLine({
+                  price: Number(openTrade.entry_spot),
+                  color: '#eab308',
+                  lineWidth: 2,
+                  lineStyle: LS.Dashed,
+                  axisLabelVisible: true,
+                  title: 'ENTRY (' + openTrade.multiplier + 'x): ' + Number(openTrade.entry_spot).toFixed(2)
+                }));
+              } catch (e) {}
+            }
+
+            // Plot Open Trade's Exact Structural Stop Loss
+            if (openTrade.structural_stop && Number(openTrade.structural_stop) > 0) {
+              try {
+                this.priceLines.push(this.candlestickSeries.createPriceLine({
+                  price: Number(openTrade.structural_stop),
+                  color: '#ef4444',
+                  lineWidth: 2,
+                  lineStyle: LS.Solid,
+                  axisLabelVisible: true,
+                  title: 'SL (TRADE): ' + Number(openTrade.structural_stop).toFixed(2)
+                }));
+              } catch (e) {}
+            }
+
+            // Plot Open Trade's Exact Structural Take Profit
+            if (openTrade.structural_target && Number(openTrade.structural_target) > 0) {
+              try {
+                this.priceLines.push(this.candlestickSeries.createPriceLine({
+                  price: Number(openTrade.structural_target),
+                  color: '#06b6d4',
+                  lineWidth: 2,
+                  lineStyle: LS.Solid,
+                  axisLabelVisible: true,
+                  title: 'TP (TRADE): ' + Number(openTrade.structural_target).toFixed(2)
+                }));
+              } catch (e) {}
+            }
+          } else {
+            // No active trade on this timeframe: Plot pending Structural Invalidation/Stop & Target
+            const isBoom = this.activeChartSymbol.includes('BOOM');
+            const curSpot = Number(this.symSpot(this.activeChartSymbol)) || (this.currentCandles?.length ? Number(this.currentCandles[this.currentCandles.length - 1].close) : 0);
+
+            // 4. Pending Structural Invalidation / Stop
+            const st = Number(a.stop || (a.zone_active ? a.invalidation : 0));
+            if (st > 0 && curSpot > 0) {
+              // Directional safety check: on BOOM, SL must be strictly below price; on CRASH, strictly above price
+              const isStValid = isBoom ? (st < curSpot) : (st > curSpot);
+              if (isStValid) {
+                try {
+                  this.priceLines.push(this.candlestickSeries.createPriceLine({
+                    price: st,
+                    color: '#ef4444',
+                    lineWidth: 1,
+                    lineStyle: LS.Dotted,
+                    axisLabelVisible: true,
+                    title: a.signal_confirmed ? 'STOP LOSS' : 'INVALIDATION'
+                  }));
+                } catch (e) {}
+              }
+            }
+
+            // 5. Pending Structural Target
+            const tg = Number(a.target || 0);
+            if (tg > 0 && curSpot > 0) {
+              // Directional safety check: on BOOM, TP must be strictly above price; on CRASH, strictly below price
+              const isTgValid = isBoom ? (tg > curSpot) : (tg < curSpot);
+              if (isTgValid) {
+                try {
+                  this.priceLines.push(this.candlestickSeries.createPriceLine({
+                    price: tg,
+                    color: '#06b6d4',
+                    lineWidth: 1,
+                    lineStyle: LS.Dotted,
+                    axisLabelVisible: true,
+                    title: 'TARGET'
+                  }));
+                } catch (e) {}
+              }
+            }
           }
         },
 
@@ -814,11 +873,11 @@
           }
         },
 
-        async loadCandles(symbol) {
+        async loadCandles(symbol, tf) {
           if (!this.candlestickSeries) return;
           this.chartLoading = true;
           try {
-            const res = await fetch('/api/candles/' + symbol);
+            const res = await fetch(`/api/candles/${symbol}?tf=${tf}`);
             const candles = await res.json();
             if (Array.isArray(candles) && candles.length) {
               const formatted = candles.map(c => ({
@@ -837,7 +896,6 @@
                 }
               }
               if (deduped.length) {
-                // Remove price lines before setData so scale autoscale fits the new symbol's price
                 if (this.priceLines && this.priceLines.length) {
                   for (const pl of this.priceLines) {
                     try { this.candlestickSeries.removePriceLine(pl); } catch (e) {}
@@ -850,12 +908,10 @@
                 this.candlesLoaded = true;
                 this.candlesCount = deduped.length;
 
-                // Fetch and apply full indicator structure markers & levels
                 try {
-                  const indRes = await fetch('/api/indicator/' + symbol);
+                  const indRes = await fetch(`/api/indicator/${symbol}?tf=${tf}`);
                   const indData = await indRes.json();
                   if (Array.isArray(indData.markers)) {
-                    // Safe filter: ensure every marker time actually exists on this candlestick series
                     const candleTimes = new Set(deduped.map(c => c.time));
                     const validMarkers = indData.markers.filter(m => candleTimes.has(m.time));
                     this.applyMarkers(validMarkers);
@@ -878,9 +934,12 @@
         updateChartRealtime() {
           if (!this.candlestickSeries || !this.data.symbols) return;
           const symData = this.data.symbols[this.activeChartSymbol];
-          if (!symData || !symData.forming_bar) return;
+          if (!symData) return;
 
-          const b = symData.forming_bar;
+          const tfData = symData.timeframes?.[String(this.activeChartTf)];
+          const b = tfData?.forming_bar || symData.forming_bar;
+          if (!b) return;
+
           const t = Math.floor(Number(b.openTime) / 1000);
           if (!t || isNaN(t)) return;
 
@@ -902,69 +961,42 @@
             const p = s.pip_size != null ? s.pip_size : 3;
             return Number(s.spot).toFixed(p);
           }
-          if (s && s.forming_bar && s.forming_bar.close != null) {
-            return Number(s.forming_bar.close).toFixed(3);
-          }
           return '—';
         },
 
-        symDir(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return a?.direction_label || 'NEUTRAL';
+        symOpenTrades(symbol) {
+          const s = this.data.symbols?.[symbol];
+          return s?.open_trades_count || 0;
         },
 
-        symDirClass(symbol) {
-          const d = this.symDir(symbol);
+        tfDir(symbol, tf) {
+          const tfData = this.data.symbols?.[symbol]?.timeframes?.[String(tf)];
+          return tfData?.analysis?.direction_label || 'WAIT';
+        },
+
+        tfDirClass(symbol, tf) {
+          const d = this.tfDir(symbol, tf);
           if (d === 'UP') return 'text-emerald-400';
           if (d === 'DOWN') return 'text-rose-400';
           return 'text-slate-400';
         },
 
-        symBreak(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return a?.break_label || 'NONE';
+        tfBreak(symbol, tf) {
+          const tfData = this.data.symbols?.[symbol]?.timeframes?.[String(tf)];
+          const b = tfData?.analysis?.break_label || 'NONE';
+          if (b !== 'NONE') return b;
+          if (tfData?.analysis?.zone_active) return 'Retest Zone (' + tfData.analysis.retest_age + '/12)';
+          return 'Monitoring';
         },
 
-        symZoneText(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          if (!a || !a.zone_active) return 'No active zone';
-          const age = a.retest_age != null ? a.retest_age : 0;
-          const mid = a.zone_mid != null ? Number(a.zone_mid).toFixed(2) : '—';
-          return 'Active @ ' + mid + ' (' + age + '/12 bars)';
-        },
-
-        symZoneClass(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return a?.zone_active ? 'text-amber-300 font-bold' : 'text-slate-500';
-        },
-
-        symSupport(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return a?.support ? Number(a.support).toFixed(2) : '—';
-        },
-
-        symResistance(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return a?.resistance ? Number(a.resistance).toFixed(2) : '—';
-        },
-
-        symStop(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return Number(a?.stop || a?.invalidation || 0);
-        },
-
-        symTarget(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return Number(a?.target || 0);
-        },
-
-        symSignalConfirmed(symbol) {
-          const a = this.data.symbols?.[symbol]?.analysis;
-          return !!a?.signal_confirmed;
+        tfSignalConfirmed(symbol, tf) {
+          const tfData = this.data.symbols?.[symbol]?.timeframes?.[String(tf)];
+          return !!tfData?.analysis?.signal_confirmed;
         },
 
         activeParentText() {
-          const a = this.data.symbols?.[this.activeChartSymbol]?.analysis;
+          const tfData = this.data.symbols?.[this.activeChartSymbol]?.timeframes?.[String(this.activeChartTf)];
+          const a = tfData?.analysis;
           if (!a) return '—';
           const p1 = (a.parent1?.tf || '') + ' ' + (a.parent1?.dir || '—');
           const p2 = (a.parent2?.tf || '') + ' ' + (a.parent2?.dir || '—');

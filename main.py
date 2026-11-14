@@ -1,10 +1,15 @@
-"""DERIV Multipliers Bot — Spikebot 3.00 Market Structure Strategy (BOOM1000 & CRASH1000).
+"""DERIV Multipliers Bot — Spikebot 3.00 Market Structure Multi-Timeframe Strategy.
+Scans ALL supported timeframes concurrently:
+- 1m  -> 500x leverage (Parents: 5m, 15m)
+- 2m  -> 400x leverage (Parents: 10m, 30m)
+- 5m  -> 300x leverage (Parents: 15m, 60m)
+- 15m -> 200x leverage (Parents: 60m, 240m)
 
-Faithfully ported from the MT5 EA:
-- StructureCore.mqh (5-bar causal confirmed pivots, BOS / CHoCH, role-reversal retest zones)
-- SpikebotSignals.mqh (Active Structure & Aligned Structure higher-timeframe confluence)
-- Multiplier leverage: 100x, 200x, 300x, 400x, 500x.
-- Real-time Interactive Candlestick Chart with symbol switcher tab on the dashboard.
+Features:
+- Independent trade lifecycle per position (each tracks its own timeframe, leverage, SL, and TP).
+- Concurrent positions on the same symbol up to `max_open_trades_per_symbol`.
+- Direction-locked execution: BOOM strictly trades MULTUP (BUY); CRASH strictly trades MULTDOWN (SELL).
+- Interactive Chart supporting real-time switching across symbols and all timeframes.
 """
 import asyncio
 import json
@@ -20,44 +25,50 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from bot.config import (settings, SUPPORTED_SYMBOLS, SUPPORTED_MULTIPLIERS,
-                        SUPPORTED_TIMEFRAMES)
+from bot.config import (settings, SUPPORTED_SYMBOLS, SUPPORTED_TIMEFRAMES,
+                        TIMEFRAME_MULTIPLIER_MAP, ALL_REQUIRED_GRANULARITIES)
 import bot.spikebot as spikebot
 import bot.utils as utils
 from bot.deriv_ws import DerivClient
 
 SEED_CANDLE_COUNT = 300
+ALL_SCAN_TIMEFRAMES = [1, 2, 5, 15]
 
 
 class SymbolState:
-    """Maintains multi-timeframe candles and Spikebot 3.00 Market Structure state for one symbol."""
+    """Maintains multi-timeframe candles and Spikebot 3.00 analyzers across all timeframes for one symbol."""
 
     def __init__(self, symbol: str):
         self.symbol = symbol.upper()
-        self.base_candles: List[Dict[str, Any]] = []
-        self.p1_candles: List[Dict[str, Any]] = []
-        self.p2_candles: List[Dict[str, Any]] = []
-        self.analyzer = spikebot.SpikebotAnalyzer(
-            symbol=self.symbol,
-            timeframe_minutes=settings.TIMEFRAME_MINUTES,
-            signal_mode=settings.SIGNAL_MODE,
-            structure_window=spikebot.ms_window(settings.TIMEFRAME_MINUTES)
-        )
+        # Granularity in minutes -> candle list
+        self.candles: Dict[int, List[Dict[str, Any]]] = {g: [] for g in ALL_REQUIRED_GRANULARITIES}
+        # Independent analyzers for each scanned timeframe
+        self.analyzers: Dict[int, spikebot.SpikebotAnalyzer] = {
+            tf: spikebot.SpikebotAnalyzer(
+                symbol=self.symbol,
+                timeframe_minutes=tf,
+                signal_mode=settings.SIGNAL_MODE,
+                structure_window=spikebot.ms_window(tf)
+            )
+            for tf in ALL_SCAN_TIMEFRAMES
+        }
         self.seeded = False
-        self.latest_analysis: Dict[str, Any] = {}
-        self.last_candidate: Optional[Dict[str, Any]] = None
-        self.last_logged_break: Optional[str] = None
-        self.last_logged_zone: bool = False
+        self.latest_analyses: Dict[int, Dict[str, Any]] = {}
+        self.last_logged_break: Dict[int, Optional[str]] = {tf: None for tf in ALL_SCAN_TIMEFRAMES}
+        self.last_logged_zone: Dict[int, bool] = {tf: False for tf in ALL_SCAN_TIMEFRAMES}
         self.wins = 0
         self.losses = 0
 
-    @property
-    def prev_bar(self) -> Optional[Dict[str, Any]]:
-        return self.base_candles[-2] if len(self.base_candles) >= 2 else None
+    def get_candles(self, tf: int) -> List[Dict[str, Any]]:
+        return self.candles.get(tf, [])
 
-    @property
-    def current_forming_bar(self) -> Optional[Dict[str, Any]]:
-        return self.base_candles[-1] if self.base_candles else None
+    def prev_bar(self, tf: int) -> Optional[Dict[str, Any]]:
+        c = self.candles.get(tf, [])
+        return c[-2] if len(c) >= 2 else None
+
+    def current_forming_bar(self, tf: int) -> Optional[Dict[str, Any]]:
+        c = self.candles.get(tf, [])
+        return c[-1] if c else None
 
 
 symbols_state: Dict[str, SymbolState] = {}
@@ -118,8 +129,7 @@ deriv.on_tick = _on_tick_received
 state: Dict[str, Any] = {
     "latest_data": {
         "timestamp": datetime.now().isoformat(),
-        "timing": {},
-        "strategy": "Spikebot 3.00 Market Structure",
+        "strategy": "Spikebot 3.00 Multi-Timeframe Engine",
         "trading_state": {
             "mode": settings.MODE,
             "balance": None,
@@ -130,31 +140,15 @@ state: Dict[str, Any] = {
             "is_virtual": True,
             "can_trade": False,
             "guard": "initializing",
-            "multiplier": settings.MULTIPLIER,
+            "timeframe_multiplier_map": TIMEFRAME_MULTIPLIER_MAP,
             "signal_mode": "active_structure",
-            "timeframe_minutes": settings.TIMEFRAME_MINUTES,
             "symbols": settings.active_symbols(),
             "active_trades": [],
             "history_count": 0,
-            "tp_sl_mode": "structural",
+            "max_open_trades_per_symbol": settings.MAX_OPEN_TRADES_PER_SYMBOL,
             "risk": {"type": settings.RISK_TYPE, "value": settings.RISK_VALUE}
         },
-        "symbols": {
-            sym: {
-                "symbol": sym,
-                "spot": 0.0,
-                "pip_size": 0.001,
-                "analysis": {"direction_label": "WAIT", "zone_active": False, "signal_confirmed": False},
-                "candidate": None,
-                "prev_bar": None,
-                "forming_bar": None,
-                "wins": 0,
-                "losses": 0,
-                "reason": "initializing",
-                "candles_count": 0
-            }
-            for sym in settings.active_symbols()
-        }
+        "symbols": {}
     },
     "last_update_ts": 0,
     "balance": None,
@@ -162,7 +156,7 @@ state: Dict[str, Any] = {
     "trade_history": [],
     "logs": [],
     "running": False,
-    "entered_windows": [],   # formatted as f"{symbol}:{window_id}"
+    "entered_windows": [],   # formatted as f"{symbol}:{tf}m:{window_id}"
 }
 
 
@@ -170,10 +164,9 @@ def log_message(msg: str):
     line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
     print(line)
     state["logs"].append(line)
-    if len(state["logs"]) > 200:
+    if len(state["logs"]) > 250:
         state["logs"].pop(0)
 
-    # Persist directly to activity.log so logs are permanently preserved
     try:
         utils.ensure_dir("logs")
         with open("logs/activity.log", "a", encoding="utf-8") as f:
@@ -204,7 +197,6 @@ def save_state():
 
 def load_state():
     try:
-        # Load previous activity logs from disk if available
         if os.path.exists("logs/activity.log"):
             try:
                 with open("logs/activity.log", "r", encoding="utf-8") as f:
@@ -219,7 +211,7 @@ def load_state():
             state["running"] = bool(d.get("running", False))
             state["active_trades"] = d.get("active_trades", [])
             state["trade_history"] = d.get("trade_history", [])
-            state["entered_windows"] = d.get("entered_windows", d.get("entered_markets", []))
+            state["entered_windows"] = d.get("entered_windows", [])
             log_message("Persistent state and history loaded")
         else:
             log_message("No previous state file found; fresh session initialized")
@@ -242,8 +234,8 @@ def can_trade():
     return True, "ok"
 
 
-def window_timing() -> Dict[str, float]:
-    wms = settings.TIMEFRAME_MINUTES * 60_000
+def window_timing(tf_minutes: int = 5) -> Dict[str, float]:
+    wms = tf_minutes * 60_000
     now_ms = time.time() * 1000
     start = (now_ms // wms) * wms
     end = start + wms
@@ -256,7 +248,7 @@ def window_timing() -> Dict[str, float]:
 
 
 def update_forming_candle(candles: List[Dict[str, Any]], spot: float, tf_minutes: int) -> bool:
-    """Fold latest spot into the forming candle for a given timeframe. Returns True if candle just closed."""
+    """Fold latest spot into the forming candle for a given timeframe. Returns True if candle just rolled/closed."""
     if spot is None:
         return False
     now_ms = time.time() * 1000
@@ -296,7 +288,7 @@ def generate_preview_candles(symbol: str, count: int = 150, granularity: int = 3
     price = base_price
 
     import random
-    rng = random.Random(abs(hash(symbol)) % 10000)
+    rng = random.Random(abs(hash(symbol)) % 10000 + granularity)
 
     for i in range(count):
         bucket = start_ms + (i * step_ms)
@@ -335,34 +327,31 @@ def generate_preview_candles(symbol: str, count: int = 150, granularity: int = 3
 
 
 async def seed_candles_all():
-    """Seed base and higher-timeframe ladder candles for all active symbols."""
+    """Seed all granularities across all base and parent timeframes for all active symbols."""
     active_syms = settings.active_symbols()
     for sym in active_syms:
         sym_st = get_symbol_state(sym)
-        p1_min, p2_min = spikebot.parent_timeframes_for(settings.TIMEFRAME_MINUTES)
-        sym_st.analyzer.timeframe_minutes = settings.TIMEFRAME_MINUTES
-        sym_st.analyzer.p1_minutes = p1_min
-        sym_st.analyzer.p2_minutes = p2_min
-        sym_st.analyzer.signal_mode = settings.SIGNAL_MODE
-        sym_st.analyzer.structure_window = spikebot.ms_window(settings.TIMEFRAME_MINUTES)
+        loaded = 0
+        for g in ALL_REQUIRED_GRANULARITIES:
+            raw = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, g * 60)
+            if raw:
+                sym_st.candles[g] = raw
+                loaded += 1
+            elif not sym_st.candles[g]:
+                sym_st.candles[g] = generate_preview_candles(sym, count=150, granularity=g * 60)
 
-        # 1. Base timeframe candles
-        base = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, settings.TIMEFRAME_MINUTES * 60)
-        # 2. Parent 1 timeframe candles (300 candles ensure full structure warmup)
-        p1 = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, p1_min * 60)
-        # 3. Parent 2 timeframe candles (300 candles ensure full structure warmup)
-        p2 = await deriv.fetch_seed_candles(sym, SEED_CANDLE_COUNT, p2_min * 60)
+        # Update all analyzers for base timeframes (1m, 2m, 5m, 15m)
+        for tf in ALL_SCAN_TIMEFRAMES:
+            p1_min, p2_min = spikebot.parent_timeframes_for(tf)
+            sym_st.analyzers[tf].update_data(
+                local_raw=sym_st.candles.get(tf, []),
+                p1_raw=sym_st.candles.get(p1_min, []),
+                p2_raw=sym_st.candles.get(p2_min, [])
+            )
+            sym_st.latest_analyses[tf] = sym_st.analyzers[tf].analyze_latest()
 
-        if base:
-            sym_st.base_candles = base
-            sym_st.p1_candles = p1 or []
-            sym_st.p2_candles = p2 or []
-            sym_st.analyzer.update_data(sym_st.base_candles, sym_st.p1_candles, sym_st.p2_candles)
-            sym_st.latest_analysis = sym_st.analyzer.analyze_latest()
-            sym_st.seeded = True
-            log_message(f"Seeded {len(base)}x {settings.TIMEFRAME_MINUTES}m bars + parents ({p1_min}m, {p2_min}m) for {sym}")
-        else:
-            log_message(f"Seeding pending for {sym}...")
+        sym_st.seeded = True
+        log_message(f"Seeded candles for {sym} ({loaded}/{len(ALL_REQUIRED_GRANULARITIES)} live). Active scanning: {ALL_SCAN_TIMEFRAMES}")
 
 
 def _stake_amount() -> Optional[float]:
@@ -378,59 +367,95 @@ def _stake_amount() -> Optional[float]:
 
 async def _open_multiplier_trade(symbol: str, contract_type: str, stake: float, multiplier: int,
                                  structural_stop: Optional[float] = None,
-                                 structural_target: Optional[float] = None):
-    """Execute a Multiplier buy order with dynamic Structural Stop Loss and Target TP."""
+                                 structural_target: Optional[float] = None,
+                                 timeframe: int = 5):
+    """Execute a Multiplier buy order with dynamic Structural Stop Loss and Target TP for a specific timeframe."""
+    sym_st = get_symbol_state(symbol)
     spot_val = deriv.get_last(symbol).get("price") or 1.0
 
-    dollar_tp = None
-    dollar_sl = None
+    # Retrieve current scale (bar range) from latest analysis
+    tf_analysis = sym_st.latest_analyses.get(timeframe, {})
+    scale = float(tf_analysis.get("scale", 0.0) or (spot_val * 0.001))
+    if scale <= 0:
+        scale = spot_val * 0.001
 
-    # Calculate exact dollar TP and SL derived from Structural Target and Structural Stop
-    if spot_val > 0:
-        if contract_type == "MULTUP":
-            if structural_target and structural_target > spot_val:
-                dollar_tp = round(stake * multiplier * (structural_target - spot_val) / spot_val, 2)
-            if structural_stop and structural_stop < spot_val:
-                dollar_sl = round(stake * multiplier * (spot_val - structural_stop) / spot_val, 2)
-        else:  # MULTDOWN
-            if structural_target and structural_target < spot_val:
-                dollar_tp = round(stake * multiplier * (spot_val - structural_target) / spot_val, 2)
-            if structural_stop and structural_stop > spot_val:
-                dollar_sl = round(stake * multiplier * (structural_stop - spot_val) / spot_val, 2)
+    # Guarantee strict structural validity relative to current spot price
+    if contract_type == "MULTUP":
+        # For BUY: SL must be strictly below spot, TP must be strictly above spot
+        if structural_stop is None or structural_stop >= spot_val or structural_stop <= 0:
+            structural_stop = round(spot_val - max(scale, 1.0), 3)
+        risk_dist = max(spot_val - structural_stop, scale * 0.5)
+        if structural_target is None or structural_target <= spot_val:
+            structural_target = round(spot_val + (2.0 * risk_dist), 3)
 
-    # Deriv limit_order proposal stop_loss cannot exceed stake (capped to 95% of stake if larger)
+        dollar_tp = round(stake * multiplier * (structural_target - spot_val) / spot_val, 2)
+        dollar_sl = round(stake * multiplier * (spot_val - structural_stop) / spot_val, 2)
+    else:  # MULTDOWN
+        # For SELL: SL must be strictly above spot, TP must be strictly below spot
+        if structural_stop is None or structural_stop <= spot_val or structural_stop <= 0:
+            structural_stop = round(spot_val + max(scale, 1.0), 3)
+        risk_dist = max(structural_stop - spot_val, scale * 0.5)
+        if structural_target is None or structural_target >= spot_val:
+            structural_target = round(spot_val - (2.0 * risk_dist), 3)
+
+        dollar_tp = round(stake * multiplier * (spot_val - structural_target) / spot_val, 2)
+        dollar_sl = round(stake * multiplier * (structural_stop - spot_val) / spot_val, 2)
+
+    # Deriv limit_order proposal:
+    # Only pass stop_loss to Deriv if dollar_sl < stake * 0.95.
+    # If dollar_sl >= stake * 0.95, do NOT pass stop_loss to Deriv because:
+    # 1. Deriv multipliers already enforce a hard 100% loss cap at stake amount (cannot lose more than stake).
+    # 2. Capping SL to 95% of stake in the Deriv broker order forces an artificial premature stop-out
+    #    before price reaches the actual structural invalidation level!
+    # Our settle_trades() loop tracks and enforces the exact structural SL in real-time.
     deriv_sl = None
-    if dollar_sl and dollar_sl > 0:
-        deriv_sl = round(min(dollar_sl, stake * 0.95), 2)
+    if dollar_sl and 0 < dollar_sl < (stake * 0.95):
+        deriv_sl = round(dollar_sl, 2)
+
+    deriv_tp = dollar_tp if (dollar_tp and dollar_tp > 0) else None
 
     prop = await deriv.get_multiplier_proposal(
         symbol=symbol,
         contract_type=contract_type,
         amount=stake,
         multiplier=multiplier,
-        take_profit=dollar_tp,
+        take_profit=deriv_tp,
         stop_loss=deriv_sl
     )
     if not prop.get("ok"):
-        log_message(f"Proposal failed for {symbol} {contract_type}: {prop.get('error')}")
+        log_message(f"[{symbol} {timeframe}m] Proposal failed for {contract_type} {multiplier}x: {prop.get('error')}")
         return "proposal_failed"
 
     res = await deriv.buy(prop["id"], prop["ask_price"])
     if not res.get("ok"):
-        log_message(f"BUY failed for {symbol} {contract_type}: {res.get('error')}")
+        log_message(f"[{symbol} {timeframe}m] BUY failed for {contract_type} {multiplier}x: {res.get('error')}")
         return "buy_failed"
 
     contract_id = res.get("contract_id")
     live_spot = deriv.get_last(symbol).get("price") or prop.get("spot")
 
     st = await deriv.contract_status(contract_id)
-    entry_spot = st.get("entry_spot") or live_spot
-    barrier = st.get("barrier")  # Stop-out level for multipliers
+    entry_spot = float(st.get("entry_spot") or live_spot or spot_val)
+    barrier = st.get("barrier")
+
+    # Final post-fill reconciliation: ensure structural SL & TP remain aligned with actual fill entry_spot
+    if entry_spot > 0:
+        if contract_type == "MULTUP":
+            if structural_stop >= entry_spot:
+                structural_stop = round(entry_spot - risk_dist, 3)
+            if structural_target <= entry_spot:
+                structural_target = round(entry_spot + (2.0 * risk_dist), 3)
+        else:  # MULTDOWN
+            if structural_stop <= entry_spot:
+                structural_stop = round(entry_spot + risk_dist, 3)
+            if structural_target >= entry_spot:
+                structural_target = round(entry_spot - (2.0 * risk_dist), 3)
 
     trade = {
         "contract_id": contract_id,
         "symbol": symbol,
         "contract_type": contract_type,
+        "timeframe": timeframe,
         "multiplier": multiplier,
         "stake": stake,
         "entry_spot": entry_spot,
@@ -451,14 +476,14 @@ async def _open_multiplier_trade(symbol: str, contract_type: str, stake: float, 
     save_state()
 
     log_message(
-        f"BUY {symbol} {contract_type} {multiplier}x @ {entry_spot} | Stake: ${stake:.2f} | "
-        f"Structural SL: {structural_stop} | Structural TP: {structural_target} (Contract ID: {contract_id})"
+        f"⚡ [{symbol} {timeframe}m] ENTERED {contract_type} {multiplier}x @ {entry_spot:.2f} | "
+        f"Stake: ${stake:.2f} | SL: {structural_stop:.2f} | TP: {structural_target:.2f} (ID: {contract_id})"
     )
     return "entered"
 
 
 async def close_position_manually(contract_id: Union[int, str]) -> Dict[str, Any]:
-    """Sell/close an active multiplier contract."""
+    """Sell/close an active multiplier contract immediately."""
     res = await deriv.sell(contract_id, price=0)
     if res.get("ok"):
         log_message(f"Sold contract {contract_id} for ${res.get('sold_for', 0):.2f}")
@@ -468,7 +493,7 @@ async def close_position_manually(contract_id: Union[int, str]) -> Dict[str, Any
 
 
 async def settle_trades():
-    """Poll open contracts, track real-time P/L, and settle sold positions."""
+    """Poll open contracts, track real-time P/L independently for each trade, and auto-settle upon SL/TP."""
     remaining = []
     changed = False
 
@@ -493,6 +518,8 @@ async def settle_trades():
         if st.get("barrier") is not None:
             t["barrier"] = st.get("barrier")
 
+        tf_lbl = f"{t.get('timeframe', '?')}m"
+
         if st.get("is_sold"):
             t["status"] = "WON" if (profit or 0) > 0 else "LOST"
             t["profit_loss"] = profit
@@ -507,9 +534,9 @@ async def settle_trades():
                     sym_st.wins += 1
                 else:
                     sym_st.losses += 1
-            log_message(f"{tag}: {t['symbol']} {t['contract_type']} {t['multiplier']}x settled with P/L ${profit:.2f}")
+            log_message(f"{tag}: [{t['symbol']} {tf_lbl}] {t['contract_type']} {t['multiplier']}x settled with P/L ${profit:.2f}")
         else:
-            # Market Structure Automatic Exit Checks (Structural Stop Loss & Target TP)
+            # Independent Market Structure Automatic Exit Checks (SL & TP)
             s_stop = t.get("structural_stop")
             s_target = t.get("structural_target")
             is_multup = t.get("contract_type") == "MULTUP"
@@ -522,23 +549,42 @@ async def settle_trades():
             if cur_price and s_stop:
                 if is_multup and cur_price <= s_stop:
                     should_close = True
-                    close_reason = f"Structural Stop Loss hit: spot {cur_price:.2f} <= SL {s_stop:.2f} (P/L: ${profit or 0:.2f})"
+                    close_reason = f"Structural SL hit [{tf_lbl}]: spot {cur_price:.2f} <= SL {s_stop:.2f} (P/L: ${profit or 0:.2f})"
                 elif not is_multup and cur_price >= s_stop:
                     should_close = True
-                    close_reason = f"Structural Stop Loss hit: spot {cur_price:.2f} >= SL {s_stop:.2f} (P/L: ${profit or 0:.2f})"
+                    close_reason = f"Structural SL hit [{tf_lbl}]: spot {cur_price:.2f} >= SL {s_stop:.2f} (P/L: ${profit or 0:.2f})"
 
             # 2. Structural Target: Target price achieved
             if not should_close and cur_price and s_target:
                 if is_multup and cur_price >= s_target:
                     should_close = True
-                    close_reason = f"Structural Target reached: spot {cur_price:.2f} >= TP {s_target:.2f} (P/L: +${profit or 0:.2f})"
+                    close_reason = f"Structural Target reached [{tf_lbl}]: spot {cur_price:.2f} >= TP {s_target:.2f} (P/L: +${profit or 0:.2f})"
                 elif not is_multup and cur_price <= s_target:
                     should_close = True
-                    close_reason = f"Structural Target reached: spot {cur_price:.2f} <= TP {s_target:.2f} (P/L: +${profit or 0:.2f})"
+                    close_reason = f"Structural Target reached [{tf_lbl}]: spot {cur_price:.2f} <= TP {s_target:.2f} (P/L: +${profit or 0:.2f})"
 
             if should_close:
-                log_message(f"Auto-closing {t['symbol']} {t['contract_type']}: {close_reason}")
-                await deriv.sell(cid, price=0)
+                log_message(f"Auto-closing [{t['symbol']} {tf_lbl}] {t['contract_type']}: {close_reason}")
+                sell_res = await deriv.sell(cid, price=0)
+                if sell_res.get("ok"):
+                    post_st = await deriv.contract_status(cid)
+                    if post_st.get("ok") and post_st.get("is_sold"):
+                        p_val = post_st.get("profit") if post_st.get("profit") is not None else profit
+                        t["status"] = "WON" if (p_val or 0) > 0 else "LOST"
+                        t["profit_loss"] = p_val
+                        t["sell_price"] = post_st.get("sell_price") or cur_price
+                        t["exit_time"] = datetime.now().isoformat()
+                        state["trade_history"].append(t)
+                        changed = True
+                        tag = "WIN" if t["status"] == "WON" else "LOSS"
+                        sym_st = symbols_state.get(t["symbol"])
+                        if sym_st:
+                            if t["status"] == "WON":
+                                sym_st.wins += 1
+                            else:
+                                sym_st.losses += 1
+                        log_message(f"{tag}: [{t['symbol']} {tf_lbl}] {t['contract_type']} {t['multiplier']}x settled with P/L ${p_val or 0:.2f}")
+                        continue
 
             remaining.append(t)
 
@@ -550,13 +596,12 @@ async def settle_trades():
 
 
 async def update_loop():
-    """Event-driven trading engine loop reacting to real-time ticks & broadcasting via WebSocket."""
-    csv_header = ["timestamp", "symbol", "spot", "contract_type", "multiplier", "stake", "direction", "zone_active", "signal_confirmed", "reason"]
+    """Event-driven trading engine loop reacting to ticks, scanning all timeframes, and broadcasting live."""
+    csv_header = ["timestamp", "symbol", "timeframe", "spot", "contract_type", "multiplier", "stake", "direction", "zone_active", "signal_confirmed", "reason"]
     utils.ensure_dir("logs")
 
     while True:
         try:
-            # Event-driven wait: trigger immediately on incoming tick, or timeout after 1.0s for time-based tasks
             try:
                 await asyncio.wait_for(tick_event.wait(), timeout=1.0)
             except asyncio.TimeoutError:
@@ -578,140 +623,145 @@ async def update_loop():
                 state["balance_fetched_at"] = time.time()
             state["balance"] = deriv.balance
 
-            timing = window_timing()
-            window_id = int(timing["startMs"])
             stake = _stake_amount()
-
             symbols_payload = {}
+
             for sym in active_syms:
                 sym_st = get_symbol_state(sym)
                 spot = deriv.get_last(sym).get("price")
 
-                # Update base & parent forming candles
-                base_closed = update_forming_candle(sym_st.base_candles, spot, settings.TIMEFRAME_MINUTES)
-                update_forming_candle(sym_st.p1_candles, spot, sym_st.analyzer.p1_minutes)
-                update_forming_candle(sym_st.p2_candles, spot, sym_st.analyzer.p2_minutes)
+                # 1. Update forming candles across all granularities
+                closed_info = {}
+                for g in ALL_REQUIRED_GRANULARITIES:
+                    rolled = update_forming_candle(sym_st.candles[g], spot, g)
+                    closed_info[g] = rolled
 
-                # Re-run Spikebot 3.00 Market Structure analysis
-                sym_st.analyzer.update_data(sym_st.base_candles, sym_st.p1_candles, sym_st.p2_candles)
-                analysis = sym_st.analyzer.analyze_latest()
-                sym_st.latest_analysis = analysis
-
-                contract_type = analysis.get("contract_type", "MULTUP" if "BOOM" in sym else "MULTDOWN")
-                display_stake = stake if stake is not None else 1.0
-
-                cand_data = {
-                    "symbol": sym,
-                    "contract_type": contract_type,
-                    "multiplier": settings.MULTIPLIER,
-                    "stake": display_stake,
-                    "priced": False,
-                    "spot": spot
-                }
-
-                if deriv.connected and deriv.authorized and spot:
-                    try:
-                        prop = await deriv.get_multiplier_proposal(
-                            sym, contract_type, display_stake, settings.MULTIPLIER
-                        )
-                        if prop.get("ok"):
-                            cand_data["ask_price"] = prop.get("ask_price")
-                            cand_data["spot"] = prop.get("spot")
-                            cand_data["priced"] = True
-                    except Exception:
-                        pass
-                sym_st.last_candidate = cand_data
-
-                # ── Spikebot Execution Gate ──
-                reason = "waiting"
+                # 2. Multi-Timeframe Concurrent Scans across 1m, 2m, 5m, 15m
+                tf_payloads = {}
                 open_trades_this_sym = [t for t in state["active_trades"] if t.get("symbol") == sym]
-                window_key = f"{sym}:{window_id}"
 
-                if not state["running"]:
-                    reason = "bot_stopped"
-                elif not spot:
-                    reason = "waiting_for_spot"
-                elif not analysis.get("ready"):
-                    reason = analysis.get("reason", "warming_up")
-                elif len(open_trades_this_sym) >= settings.MAX_OPEN_TRADES_PER_SYMBOL:
-                    reason = f"max_open_trades_reached ({len(open_trades_this_sym)})"
-                elif window_key in state["entered_windows"]:
-                    reason = "candle_window_already_entered"
-                elif not analysis.get("signal_confirmed"):
-                    reason = analysis.get("reason", "awaiting_confirmed_retest")
-                elif stake is None:
-                    reason = "insufficient_balance"
-                else:
-                    trade_ok, guard_why = can_trade()
-                    if not trade_ok:
-                        reason = guard_why
+                for tf in ALL_SCAN_TIMEFRAMES:
+                    p1_min, p2_min = spikebot.parent_timeframes_for(tf)
+                    sym_st.analyzers[tf].update_data(
+                        local_raw=sym_st.candles.get(tf, []),
+                        p1_raw=sym_st.candles.get(p1_min, []),
+                        p2_raw=sym_st.candles.get(p2_min, [])
+                    )
+                    analysis = sym_st.analyzers[tf].analyze_latest()
+                    sym_st.latest_analyses[tf] = analysis
+                    tf_leverage = TIMEFRAME_MULTIPLIER_MAP[tf]
+
+                    # Enforce strict direction lock: BOOM strictly MULTUP; CRASH strictly MULTDOWN
+                    correct_contract = "MULTUP" if "BOOM" in sym else "MULTDOWN"
+                    expected_spike_dir = 1 if "BOOM" in sym else -1
+
+                    timing = window_timing(tf)
+                    window_id = int(timing["startMs"])
+                    window_key = f"{sym}:{tf}m:{window_id}"
+
+                    # Execution Gate for this specific timeframe
+                    reason = "waiting"
+
+                    if not state["running"]:
+                        reason = "bot_stopped"
+                    elif not spot:
+                        reason = "waiting_for_spot"
+                    elif not analysis.get("ready"):
+                        reason = analysis.get("reason", "warming_up")
+                    elif len(open_trades_this_sym) >= settings.MAX_OPEN_TRADES_PER_SYMBOL:
+                        reason = f"max_open_trades_reached ({len(open_trades_this_sym)}/{settings.MAX_OPEN_TRADES_PER_SYMBOL})"
+                    elif window_key in state["entered_windows"]:
+                        reason = f"{tf}m_window_already_entered"
+                    elif not analysis.get("signal_confirmed"):
+                        reason = analysis.get("reason", "awaiting_confirmed_retest")
+                    elif analysis.get("signal") != expected_spike_dir:
+                        # Safety guarantee: never buy crash or sell boom
+                        reason = "direction_mismatch_rejected"
+                    elif stake is None:
+                        reason = "insufficient_balance"
                     else:
-                        # Confirmed Spikebot Setup: Enter Multiplier Trade!
-                        exec_res = await _open_multiplier_trade(
-                            symbol=sym,
-                            contract_type=contract_type,
-                            stake=stake,
-                            multiplier=settings.MULTIPLIER,
-                            structural_stop=analysis.get("stop"),
-                            structural_target=analysis.get("target")
-                        )
-                        if exec_res == "entered":
-                            state["entered_windows"].append(window_key)
-                            if len(state["entered_windows"]) > 200:
-                                state["entered_windows"].pop(0)
-                            reason = f"entered_{contract_type}_retest_setup"
+                        trade_ok, guard_why = can_trade()
+                        if not trade_ok:
+                            reason = guard_why
                         else:
-                            reason = exec_res
+                            # Confirmed Spikebot Setup on this timeframe: Enter Multiplier Trade!
+                            exec_res = await _open_multiplier_trade(
+                                symbol=sym,
+                                contract_type=correct_contract,
+                                stake=stake,
+                                multiplier=tf_leverage,
+                                structural_stop=analysis.get("stop"),
+                                structural_target=analysis.get("target"),
+                                timeframe=tf
+                            )
+                            if exec_res == "entered":
+                                state["entered_windows"].append(window_key)
+                                if len(state["entered_windows"]) > 300:
+                                    state["entered_windows"].pop(0)
+                                reason = f"entered_{correct_contract}_{tf}m_setup"
+                                # Update local open trades count
+                                open_trades_this_sym = [t for t in state["active_trades"] if t.get("symbol") == sym]
+                            else:
+                                reason = exec_res
 
-                # Log newly detected breaks or zone status
-                curr_break = analysis.get("break_label", "NONE")
-                curr_zone = bool(analysis.get("zone_active", False))
-                if curr_break != "NONE" and curr_break != sym_st.last_logged_break:
-                    sym_st.last_logged_break = curr_break
-                    log_message(f"[{sym}] ⚡ Break Confirmed: {curr_break} @ {spot:.2f} | Retest zone: [{analysis.get('zone_low', 0):.2f} - {analysis.get('zone_high', 0):.2f}]")
+                    # Log newly detected breaks or zone status on this timeframe
+                    curr_break = analysis.get("break_label", "NONE")
+                    curr_zone = bool(analysis.get("zone_active", False))
+                    if curr_break != "NONE" and curr_break != sym_st.last_logged_break.get(tf):
+                        sym_st.last_logged_break[tf] = curr_break
+                        log_message(f"[{sym} {tf}m] ⚡ Break Confirmed: {curr_break} @ {spot:.2f} | Zone: [{analysis.get('zone_low', 0):.2f} - {analysis.get('zone_high', 0):.2f}]")
 
-                if curr_zone and not sym_st.last_logged_zone:
-                    sym_st.last_logged_zone = True
-                    log_message(f"[{sym}] Retest Zone active [{analysis.get('zone_low', 0):.2f} - {analysis.get('zone_high', 0):.2f}] | Invalidation: {analysis.get('invalidation', 0):.2f}")
-                elif not curr_zone and sym_st.last_logged_zone:
-                    sym_st.last_logged_zone = False
+                    if curr_zone and not sym_st.last_logged_zone.get(tf):
+                        sym_st.last_logged_zone[tf] = True
+                        log_message(f"[{sym} {tf}m] Retest Zone active [{analysis.get('zone_low', 0):.2f} - {analysis.get('zone_high', 0):.2f}] | Invalidation: {analysis.get('invalidation', 0):.2f}")
+                    elif not curr_zone and sym_st.last_logged_zone.get(tf):
+                        sym_st.last_logged_zone[tf] = False
 
-                if base_closed and spot:
-                    log_message(f"[{sym} {settings.TIMEFRAME_MINUTES}m Closed] Close: {spot:.2f} | Trend: {analysis.get('direction_label')} | Break: {curr_break} | Zone: {'Active (Age ' + str(analysis.get('retest_age')) + ')' if curr_zone else 'None'} | Gate: {reason}")
+                    if closed_info.get(tf) and spot:
+                        log_message(f"[{sym} {tf}m Closed] Close: {spot:.2f} | Trend: {analysis.get('direction_label')} | Break: {curr_break} | Zone: {'Active (Age ' + str(analysis.get('retest_age')) + '/12)' if curr_zone else 'None'} | Gate: {reason}")
 
-                # Record signal telemetry
-                utils.append_csv_row("./logs/signals.csv", csv_header, [
-                    datetime.now().isoformat(), sym, spot, contract_type,
-                    settings.MULTIPLIER, display_stake, analysis.get("direction_label"),
-                    analysis.get("zone_active"), analysis.get("signal_confirmed"), reason
-                ])
+                    # Record telemetry
+                    utils.append_csv_row("./logs/signals.csv", csv_header, [
+                        datetime.now().isoformat(), sym, tf, spot, correct_contract,
+                        tf_leverage, stake if stake else 1.0, analysis.get("direction_label"),
+                        analysis.get("zone_active"), analysis.get("signal_confirmed"), reason
+                    ])
 
-                # Build symbol summary for API / WS
+                    tf_payloads[str(tf)] = {
+                        "timeframe": tf,
+                        "multiplier": tf_leverage,
+                        "analysis": analysis,
+                        "reason": reason,
+                        "prev_bar": sym_st.prev_bar(tf),
+                        "forming_bar": sym_st.current_forming_bar(tf),
+                        "candles_count": len(sym_st.candles.get(tf, []))
+                    }
+
+                primary_tf_data = tf_payloads.get("5", tf_payloads.get("1"))
                 symbols_payload[sym] = {
                     "symbol": sym,
                     "spot": spot,
                     "pip_size": deriv.get_pip_size(sym),
-                    "analysis": analysis,
-                    "candidate": cand_data,
-                    "prev_bar": sym_st.prev_bar,
-                    "forming_bar": sym_st.current_forming_bar,
+                    "primary_tf": 5,
+                    "analysis": primary_tf_data["analysis"] if primary_tf_data else {},
+                    "reason": primary_tf_data["reason"] if primary_tf_data else "initializing",
+                    "timeframes": tf_payloads,
+                    "open_trades_count": len(open_trades_this_sym),
+                    "max_trades": settings.MAX_OPEN_TRADES_PER_SYMBOL,
                     "wins": sym_st.wins,
-                    "losses": sym_st.losses,
-                    "reason": reason,
-                    "candles_count": len(sym_st.base_candles)
+                    "losses": sym_st.losses
                 }
 
-            # Periodic heartbeat logging every 2 minutes when bot is running
+            # Periodic heartbeat logging every 2 minutes
             if state["running"] and time.time() - state.get("last_heartbeat_at", 0) > 120:
                 state["last_heartbeat_at"] = time.time()
                 bal_str = f"${deriv.balance:.2f}" if deriv.balance is not None else "—"
-                log_message(f"[Heartbeat] Bot Active ({settings.TIMEFRAME_MINUTES}m) | Symbols: {active_syms} | Bal: {bal_str} | Open Trades: {len(state['active_trades'])}")
+                log_message(f"[Heartbeat] Bot Active (Scanning {ALL_SCAN_TIMEFRAMES}) | Symbols: {active_syms} | Bal: {bal_str} | Open Trades: {len(state['active_trades'])}")
 
             # Update live state snapshot
             state["latest_data"] = {
                 "timestamp": datetime.now().isoformat(),
-                "timing": timing,
-                "strategy": "Spikebot 3.00 Market Structure",
+                "strategy": "Spikebot 3.00 Multi-Timeframe Engine",
                 "trading_state": {
                     "mode": settings.MODE,
                     "balance": state["balance"],
@@ -722,20 +772,18 @@ async def update_loop():
                     "is_virtual": deriv.is_virtual,
                     "can_trade": can_trade()[0],
                     "guard": can_trade()[1],
-                    "multiplier": settings.MULTIPLIER,
+                    "timeframe_multiplier_map": TIMEFRAME_MULTIPLIER_MAP,
                     "signal_mode": settings.SIGNAL_MODE,
-                    "timeframe_minutes": settings.TIMEFRAME_MINUTES,
                     "symbols": active_syms,
                     "active_trades": state["active_trades"],
                     "history_count": len(state["trade_history"]),
-                    "tp_sl_mode": "structural",
+                    "max_open_trades_per_symbol": settings.MAX_OPEN_TRADES_PER_SYMBOL,
                     "risk": {"type": settings.RISK_TYPE, "value": settings.RISK_VALUE}
                 },
                 "symbols": symbols_payload
             }
             state["last_update_ts"] = time.time()
 
-            # Real-time WebSocket Broadcast
             await manager.broadcast({
                 "type": "update",
                 "data": state["latest_data"],
@@ -750,14 +798,20 @@ async def update_loop():
 async def lifespan(app: FastAPI):
     load_state()
 
-    # Pre-populate preview candles for all active symbols so both BOOM & CRASH charts are immediately ready
+    # Pre-populate preview candles across all granularities for all symbols
     for s in settings.active_symbols():
         sym_st = get_symbol_state(s)
-        if not sym_st.base_candles:
-            preview = generate_preview_candles(s, count=150, granularity=settings.TIMEFRAME_MINUTES * 60)
-            sym_st.base_candles = preview
-            sym_st.analyzer.update_data(preview)
-            sym_st.latest_analysis = sym_st.analyzer.analyze_latest()
+        for g in ALL_REQUIRED_GRANULARITIES:
+            if not sym_st.candles[g]:
+                sym_st.candles[g] = generate_preview_candles(s, count=150, granularity=g * 60)
+        for tf in ALL_SCAN_TIMEFRAMES:
+            p1_min, p2_min = spikebot.parent_timeframes_for(tf)
+            sym_st.analyzers[tf].update_data(
+                local_raw=sym_st.candles.get(tf, []),
+                p1_raw=sym_st.candles.get(p1_min, []),
+                p2_raw=sym_st.candles.get(p2_min, [])
+            )
+            sym_st.latest_analyses[tf] = sym_st.analyzers[tf].analyze_latest()
 
     deriv_task = asyncio.create_task(deriv.start())
     for _ in range(50):
@@ -778,7 +832,7 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Deriv Spikebot 3.00 Multiplier Bot", lifespan=lifespan)
+app = FastAPI(title="Deriv Spikebot 3.00 Multi-Timeframe Bot", lifespan=lifespan)
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -800,7 +854,6 @@ async def settings_page(request: Request):
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # Deliver immediate snapshot upon connection
         await websocket.send_json({
             "type": "snapshot",
             "data": state["latest_data"],
@@ -830,7 +883,7 @@ async def logs():
 
 @app.get("/api/logs/download")
 async def download_logs():
-    """Download full activity log file from startup."""
+    """Download full activity log file."""
     log_path = os.path.abspath("logs/activity.log")
     if not os.path.exists(log_path):
         utils.ensure_dir("logs")
@@ -862,55 +915,52 @@ async def health():
 
 
 @app.get("/api/candles/{symbol}")
-async def get_candles(symbol: str):
-    """Serve OHLC candles for the interactive chart."""
+async def get_candles(symbol: str, tf: int = 5):
+    """Serve OHLC candles for any requested timeframe (1m, 2m, 5m, 15m) for the interactive chart."""
     sym = symbol.upper()
     sym_st = get_symbol_state(sym)
-    if sym_st.base_candles:
-        return sym_st.base_candles
+    c = sym_st.candles.get(tf, [])
+    if c:
+        return c
 
     if deriv.connected:
-        candles = await deriv.fetch_seed_candles(sym, count=300, granularity=settings.TIMEFRAME_MINUTES * 60)
-        if candles:
-            sym_st.base_candles = candles
-            sym_st.analyzer.update_data(candles)
-            sym_st.latest_analysis = sym_st.analyzer.analyze_latest()
-            return candles
+        raw = await deriv.fetch_seed_candles(sym, count=300, granularity=tf * 60)
+        if raw:
+            sym_st.candles[tf] = raw
+            return raw
 
-    preview = generate_preview_candles(sym, count=150, granularity=settings.TIMEFRAME_MINUTES * 60)
-    sym_st.base_candles = preview
-    sym_st.analyzer.update_data(preview)
-    sym_st.latest_analysis = sym_st.analyzer.analyze_latest()
+    preview = generate_preview_candles(sym, count=150, granularity=tf * 60)
+    sym_st.candles[tf] = preview
     return preview
 
 
 @app.get("/api/indicator/{symbol}")
-async def get_indicator(symbol: str):
-    """Serve market structure indicator data (markers, price levels, confluence) for the interactive chart."""
+async def get_indicator(symbol: str, tf: int = 5):
+    """Serve market structure indicator levels & markers for any requested timeframe (1m, 2m, 5m, 15m)."""
     sym = symbol.upper()
     sym_st = get_symbol_state(sym)
+    p1, p2 = spikebot.parent_timeframes_for(tf)
 
-    if not sym_st.base_candles:
-        if deriv.connected:
-            candles = await deriv.fetch_seed_candles(sym, count=300, granularity=settings.TIMEFRAME_MINUTES * 60)
-            if candles:
-                sym_st.base_candles = candles
-        if not sym_st.base_candles:
-            sym_st.base_candles = generate_preview_candles(sym, count=150, granularity=settings.TIMEFRAME_MINUTES * 60)
-        sym_st.analyzer.update_data(sym_st.base_candles)
-        sym_st.latest_analysis = sym_st.analyzer.analyze_latest()
+    if tf not in sym_st.analyzers:
+        sym_st.analyzers[tf] = spikebot.SpikebotAnalyzer(
+            symbol=sym,
+            timeframe_minutes=tf,
+            signal_mode=settings.SIGNAL_MODE,
+            structure_window=spikebot.ms_window(tf)
+        )
 
-    analysis = dict(sym_st.latest_analysis or {})
-    if not analysis and sym_st.base_candles:
-        sym_st.analyzer.update_data(sym_st.base_candles)
-        analysis = sym_st.analyzer.analyze_latest()
-        sym_st.latest_analysis = analysis
+    sym_st.analyzers[tf].update_data(
+        local_raw=sym_st.candles.get(tf, []),
+        p1_raw=sym_st.candles.get(p1, []),
+        p2_raw=sym_st.candles.get(p2, [])
+    )
+    analysis = sym_st.analyzers[tf].analyze_latest()
 
-    markers = list(analysis.get("markers", []))
-    if not markers and sym_st.base_candles:
-        bars = spikebot.convert_raw_candles(sym_st.base_candles, settings.TIMEFRAME_MINUTES)
-        spike_dir = 1 if "BOOM" in sym else -1
-        markers = spikebot.compute_structure_markers(bars, spike_dir)
+    active_trade = None
+    for t in state.get("active_trades", []):
+        if t.get("symbol") == sym and int(t.get("timeframe", 0)) == int(tf):
+            active_trade = t
+            break
 
     levels = {
         "support": float(analysis.get("support", 0.0) or 0.0),
@@ -920,8 +970,9 @@ async def get_indicator(symbol: str):
         "zone_low": float(analysis.get("zone_low", 0.0) or 0.0),
         "zone_high": float(analysis.get("zone_high", 0.0) or 0.0),
         "invalidation": float(analysis.get("invalidation", 0.0) or 0.0),
-        "stop": float(analysis.get("stop", 0.0) or 0.0),
-        "target": float(analysis.get("target", 0.0) or 0.0),
+        "stop": float(active_trade.get("structural_stop") if active_trade else (analysis.get("stop") or 0.0)),
+        "target": float(active_trade.get("structural_target") if active_trade else (analysis.get("target") or 0.0)),
+        "trade_entry": float(active_trade.get("entry_spot")) if active_trade and active_trade.get("entry_spot") else None,
         "direction": str(analysis.get("direction_label", "NEUTRAL")),
         "break_label": str(analysis.get("break_label", "NONE")),
         "signal_confirmed": bool(analysis.get("signal_confirmed", False))
@@ -929,8 +980,10 @@ async def get_indicator(symbol: str):
 
     return {
         "symbol": sym,
+        "timeframe": tf,
         "levels": levels,
-        "markers": markers
+        "active_trade": active_trade,
+        "markers": analysis.get("markers", [])
     }
 
 
@@ -945,7 +998,7 @@ async def close_trade(contract_id: str):
 async def start_trading():
     state["running"] = True
     save_state()
-    log_message(f"Trading STARTED by user (Spikebot 3.00 Engine Active | TF: {settings.TIMEFRAME_MINUTES}m | Multiplier: {settings.MULTIPLIER}x | Symbols: {settings.active_symbols()})")
+    log_message(f"Trading STARTED by user (Scanning timeframes: {ALL_SCAN_TIMEFRAMES} | Multipliers: {TIMEFRAME_MULTIPLIER_MAP} | Max Trades/Sym: {settings.MAX_OPEN_TRADES_PER_SYMBOL})")
     return {"ok": True, "running": True}
 
 
@@ -967,14 +1020,12 @@ async def get_settings():
         "trading": {
             "symbols": settings.active_symbols(),
             "currency": settings.CURRENCY,
-            "multiplier": settings.MULTIPLIER,
-            "timeframe_minutes": settings.TIMEFRAME_MINUTES,
             "risk_type": settings.RISK_TYPE,
             "risk_value": settings.RISK_VALUE,
             "max_open_trades_per_symbol": settings.MAX_OPEN_TRADES_PER_SYMBOL
         },
+        "timeframe_multiplier_map": TIMEFRAME_MULTIPLIER_MAP,
         "supported_symbols": SUPPORTED_SYMBOLS,
-        "supported_multipliers": SUPPORTED_MULTIPLIERS,
         "supported_timeframes": SUPPORTED_TIMEFRAMES,
         "strategy": "active_structure"
     }
@@ -986,7 +1037,6 @@ async def post_settings(new: Dict[str, Any]):
     old_token = settings.DERIV_TOKEN
     old_app = settings.DERIV_APP_ID
     old_mode = settings.MODE
-    old_tf = settings.TIMEFRAME_MINUTES
 
     if isinstance(new.get("deriv"), dict):
         t = new["deriv"].get("token")
@@ -1010,10 +1060,10 @@ async def post_settings(new: Dict[str, Any]):
         return b
 
     merged_cfg = merge_dict(cfg, new)
-    # Strip core strategy constants from saved settings file
+    # Strip manual leverage or single tf overrides
     if "trading" in merged_cfg and isinstance(merged_cfg["trading"], dict):
-        for core_key in ["signal_mode", "tp_sl_mode", "take_profit", "stop_loss", "structure_window"]:
-            merged_cfg["trading"].pop(core_key, None)
+        for k in ["multiplier", "timeframe_minutes"]:
+            merged_cfg["trading"].pop(k, None)
 
     with open("config.json", "w") as f:
         json.dump(merged_cfg, f, indent=2)
@@ -1033,36 +1083,18 @@ async def post_settings(new: Dict[str, Any]):
             clean = [s for s in t["symbols"] if s in SUPPORTED_SYMBOLS]
             if clean:
                 settings.SYMBOLS = clean
-        if "multiplier" in t:
-            m = int(t["multiplier"])
-            if m in SUPPORTED_MULTIPLIERS:
-                settings.MULTIPLIER = m
-        settings.SIGNAL_MODE = "active_structure"
-        if "timeframe_minutes" in t:
-            tf = int(t["timeframe_minutes"])
-            if tf in SUPPORTED_TIMEFRAMES:
-                settings.TIMEFRAME_MINUTES = tf
-                for s in settings.active_symbols():
-                    st_obj = get_symbol_state(s)
-                    st_obj.analyzer.timeframe_minutes = tf
-                    p1_m, p2_m = spikebot.parent_timeframes_for(tf)
-                    st_obj.analyzer.p1_minutes = p1_m
-                    st_obj.analyzer.p2_minutes = p2_m
-                    st_obj.analyzer.structure_window = spikebot.ms_window(tf)
         if "risk_type" in t:
             settings.RISK_TYPE = t["risk_type"]
         if "risk_value" in t:
             settings.RISK_VALUE = float(t["risk_value"])
+        if "max_open_trades_per_symbol" in t:
+            settings.MAX_OPEN_TRADES_PER_SYMBOL = max(1, int(t["max_open_trades_per_symbol"]))
 
     if settings.DERIV_TOKEN != old_token or settings.DERIV_APP_ID != old_app or settings.MODE != old_mode:
         _reconnect_deriv()
         log_message(f"Deriv reconnected (mode={settings.MODE}, symbols={settings.SYMBOLS})")
     elif settings.SYMBOLS != old_symbols:
         await deriv.update_symbols(settings.active_symbols())
-        await seed_candles_all()
-    elif settings.TIMEFRAME_MINUTES != old_tf:
-        p1_m, p2_m = spikebot.parent_timeframes_for(settings.TIMEFRAME_MINUTES)
-        log_message(f"Timeframe switched to {settings.TIMEFRAME_MINUTES}m (Parents: {p1_m}m, {p2_m}m) — reseeding candles")
         await seed_candles_all()
 
     return {"status": "ok"}

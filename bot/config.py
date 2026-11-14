@@ -5,18 +5,32 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # Deriv synthetic spike indices traded by this bot with Multipliers:
-# - BOOM1000: ticks down, spikes up -> traded with MULTUP on bullish structure retest
-# - CRASH1000: ticks up, drops down -> traded with MULTDOWN on bearish structure retest
+# - BOOM1000: ticks down, spikes up -> traded strictly with MULTUP on bullish structure retest
+# - CRASH1000: ticks up, drops down -> traded strictly with MULTDOWN on bearish structure retest
 SUPPORTED_SYMBOLS = ["BOOM1000", "CRASH1000"]
 
-# Supported multiplier leverage options on Deriv:
-# 100x, 200x, 300x, 400x, 500x
-SUPPORTED_MULTIPLIERS = [100, 200, 300, 400, 500]
+# Timeframe to leverage mapping as requested:
+# 1m -> 500x
+# 2m -> 400x
+# 5m -> 300x
+# 15m -> 200x
+TIMEFRAME_MULTIPLIER_MAP: Dict[int, int] = {
+    1: 500,
+    2: 400,
+    5: 300,
+    15: 200
+}
 
-SUPPORTED_TIMEFRAMES = [1, 2, 5, 15]
+SUPPORTED_TIMEFRAMES: List[int] = [1, 2, 5, 15]
+
+# All required granularities across all base timeframes and their parent ladders:
+# 1m  -> parents (5m, 15m)
+# 2m  -> parents (10m, 30m)
+# 5m  -> parents (15m, 60m)
+# 15m -> parents (60m, 240m)
+ALL_REQUIRED_GRANULARITIES: List[int] = [1, 2, 5, 10, 15, 30, 60, 240]
 
 # Spikebot 3.00 Standard Engine: Active Structure Confluence (from SpikebotSignals.mqh)
-# Local confirmed retest entry + higher-timeframe closed parent confluence.
 DEFAULT_SIGNAL_MODE = "active_structure"
 
 
@@ -36,35 +50,41 @@ class Settings(BaseSettings):
 
     CURRENCY: str = "USD"
 
-    # Multiplier leverage: 100, 200, 300, 400, or 500
-    MULTIPLIER: int = 100
+    # All timeframes scanned concurrently
+    TIMEFRAMES: List[int] = [1, 2, 5, 15]
+
+    # Timeframe to Multiplier leverage map
+    TIMEFRAME_MULTIPLIER_MAP: Dict[int, int] = {
+        1: 500,
+        2: 400,
+        5: 300,
+        15: 200
+    }
 
     # Spikebot Standard Strategy Mode (Active Structure)
     SIGNAL_MODE: str = "active_structure"
-
-    # Base candle timeframe in minutes (1, 2, 5, 15)
-    TIMEFRAME_MINUTES: int = 5
 
     # Structure Atlas swing & break detection window (default 96 from MT5)
     STRUCTURE_WINDOW: int = 96
 
     # Risk sizing: "percent" = RISK_VALUE% of balance; "fixed" = RISK_VALUE in USD.
     RISK_TYPE: str = "percent"
-    RISK_VALUE: float = 5.0
+    RISK_VALUE: float = 2.0
 
-    # Take Profit & Stop Loss are dynamically driven by Market Structure:
-    # - Structural Stop Loss (Swing Invalidation Level)
-    # - Structural Target (Opposing Swing Target)
+    # Take Profit & Stop Loss are dynamically driven by Market Structure
     TP_SL_MODE: str = "structural"
 
-    # Maximum concurrent open positions per symbol
-    MAX_OPEN_TRADES_PER_SYMBOL: int = 1
+    # Maximum concurrent open positions per symbol across all timeframes
+    MAX_OPEN_TRADES_PER_SYMBOL: int = 2
 
     def active_symbols(self) -> List[str]:
         syms = [s for s in self.SYMBOLS if s in SUPPORTED_SYMBOLS]
         if not syms:
             syms = [SUPPORTED_SYMBOLS[0]]
         return syms
+
+    def multiplier_for_tf(self, tf: int) -> int:
+        return self.TIMEFRAME_MULTIPLIER_MAP.get(int(tf), 300)
 
 
 def load_settings() -> Settings:
@@ -96,15 +116,9 @@ def load_settings() -> Settings:
 
                 if "currency" in trading:
                     base_settings.CURRENCY = trading["currency"]
-                if "multiplier" in trading:
-                    mult = int(trading["multiplier"])
-                    if mult in SUPPORTED_MULTIPLIERS:
-                        base_settings.MULTIPLIER = mult
+
                 base_settings.SIGNAL_MODE = "active_structure"
-                if "timeframe_minutes" in trading:
-                    tf = int(trading["timeframe_minutes"])
-                    if tf in SUPPORTED_TIMEFRAMES:
-                        base_settings.TIMEFRAME_MINUTES = tf
+
                 if "risk_type" in trading:
                     base_settings.RISK_TYPE = trading["risk_type"]
                 if "risk_value" in trading:

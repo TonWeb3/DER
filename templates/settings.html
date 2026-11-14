@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Settings — Spikebot 3.00 Multipliers</title>
+    <title>Settings — Spikebot 3.00 Multi-Timeframe Multipliers</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>[x-cloak]{display:none!important;}</style>
@@ -17,7 +17,7 @@
           ⚙️ Settings
           <span class="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded">Spikebot 3.00</span>
         </h1>
-        <p class="text-xs text-slate-400 mt-0.5">Market Structure Atlas · Multiplier Leverage · Risk &amp; Deriv API</p>
+        <p class="text-xs text-slate-400 mt-0.5">Multi-Timeframe Engine (1m, 2m, 5m, 15m) · Automatic Leverage · Risk &amp; Deriv API</p>
       </div>
       <a href="/" class="bg-[#103442] hover:bg-[#194b5e] border border-[#1d4c5e] px-5 py-2 rounded-lg font-bold text-xs text-white transition">
         &larr; Back to Dashboard
@@ -26,26 +26,40 @@
 
     <form @submit.prevent="save" class="space-y-6">
 
-      <!-- Multiplier Leverage Selection (100x, 200x, 300x, 400x, 500x) -->
+      <!-- Multi-Timeframe Leverage Mapping Banner (Automatic — Replaces Manual Multiplier) -->
       <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
-        <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+        <h2 class="text-base font-bold text-white mb-1 flex items-center gap-2">
           <span>⚡</span>
-          <span>Multiplier Leverage</span>
+          <span>Multi-Timeframe Leverage Matrix (Automatic)</span>
         </h2>
         <p class="text-xs text-slate-400 mb-4">
-          Select multiplier factor for Deriv positions. Higher multiplier magnifies profit when a spike occurs.
+          The bot scans all timeframes concurrently. When a setup confirms, leverage is automatically assigned based on timeframe:
         </p>
 
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <template x-for="m in supportedMultipliers" :key="m">
-            <button type="button" @click="form.trading.multiplier = m"
-                    class="p-4 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1"
-                    :class="form.trading.multiplier === m ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-2 ring-amber-400/50 shadow-lg' : 'bg-[#0d2a37] border-[#184657] text-slate-300 hover:border-slate-500'">
-              <span class="text-2xl font-black font-mono" x-text="m+'x'"></span>
-              <span class="text-[10px] uppercase font-bold"
-                    x-text="m===100?'Base':(m===200?'Standard':(m===300?'High':(m===400?'Very High':'Maximum')))"></span>
-            </button>
-          </template>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="p-3.5 rounded-xl border bg-[#0d2a37] border-[#184657] text-center flex flex-col items-center justify-center">
+            <span class="text-xs font-bold text-cyan-300">1-Minute (1m)</span>
+            <span class="text-2xl font-black font-mono text-amber-400 mt-1">500x</span>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold mt-0.5">Scalp Spike (Parents 5m/15m)</span>
+          </div>
+
+          <div class="p-3.5 rounded-xl border bg-[#0d2a37] border-[#184657] text-center flex flex-col items-center justify-center">
+            <span class="text-xs font-bold text-cyan-300">2-Minute (2m)</span>
+            <span class="text-2xl font-black font-mono text-amber-400 mt-1">400x</span>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold mt-0.5">Fast Scalp (Parents 10m/30m)</span>
+          </div>
+
+          <div class="p-3.5 rounded-xl border bg-[#0d2a37] border-[#184657] text-center flex flex-col items-center justify-center">
+            <span class="text-xs font-bold text-cyan-300">5-Minute (5m)</span>
+            <span class="text-2xl font-black font-mono text-amber-400 mt-1">300x</span>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold mt-0.5">Standard (Parents 15m/1h)</span>
+          </div>
+
+          <div class="p-3.5 rounded-xl border bg-[#0d2a37] border-[#184657] text-center flex flex-col items-center justify-center">
+            <span class="text-xs font-bold text-cyan-300">15-Minute (15m)</span>
+            <span class="text-2xl font-black font-mono text-amber-400 mt-1">200x</span>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold mt-0.5">Macro Swing (Parents 1h/4h)</span>
+          </div>
         </div>
       </div>
 
@@ -53,10 +67,10 @@
       <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
         <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
           <span>🌐</span>
-          <span>Symbols (Trade Multiple at Once)</span>
+          <span>Traded Symbols (Trade Multiple at Once)</span>
         </h2>
         <p class="text-xs text-slate-400 mb-4">
-          Both indices can run simultaneously with independent market structure engines and order execution.
+          Both indices run simultaneously across all 4 timeframes. The bot strictly buys BOOM and sells CRASH.
         </p>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -68,9 +82,9 @@
             <div>
               <div class="font-bold text-white flex items-center gap-1.5">
                 <span>🚀 BOOM 1000</span>
-                <span class="text-[10px] bg-emerald-950 border border-emerald-800 text-emerald-300 px-1.5 rounded">MULTUP</span>
+                <span class="text-[10px] bg-emerald-950 border border-emerald-800 text-emerald-300 px-1.5 rounded">STRICTLY MULTUP</span>
               </div>
-              <p class="text-xs text-slate-400 mt-1">Confirmed bullish structure break &amp; retest enters MULTUP to capture upward spikes.</p>
+              <p class="text-xs text-slate-400 mt-1">Scans 1m, 2m, 5m, 15m. Confirmed bullish structure retests enter MULTUP (BUY) to catch upward spikes.</p>
             </div>
           </label>
 
@@ -82,43 +96,35 @@
             <div>
               <div class="font-bold text-white flex items-center gap-1.5">
                 <span>📉 CRASH 1000</span>
-                <span class="text-[10px] bg-rose-950 border border-rose-800 text-rose-300 px-1.5 rounded">MULTDOWN</span>
+                <span class="text-[10px] bg-rose-950 border border-rose-800 text-rose-300 px-1.5 rounded">STRICTLY MULTDOWN</span>
               </div>
-              <p class="text-xs text-slate-400 mt-1">Confirmed bearish structure break &amp; retest enters MULTDOWN to capture downward crashes.</p>
+              <p class="text-xs text-slate-400 mt-1">Scans 1m, 2m, 5m, 15m. Confirmed bearish structure retests enter MULTDOWN (SELL) to catch downward crashes.</p>
             </div>
           </label>
         </div>
       </div>
 
-      <!-- Timeframe & Position Execution -->
+      <!-- Concurrent Position Limits -->
       <div class="bg-[#09222c] p-6 rounded-xl border border-[#133c4a]">
         <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
-          <span>⏱️</span>
-          <span>Timeframe &amp; Position Execution</span>
+          <span>📊</span>
+          <span>Concurrent Position Limits</span>
         </h2>
         <p class="text-xs text-slate-400 mb-4">
-          Higher timeframe parent ladders (5m/15m or 15m/1h) and multi-timeframe confluence are automatically calculated.
+          Control how many independent timeframe positions can be open concurrently on the same symbol (e.g. 1m + 5m simultaneously).
         </p>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Base Timeframe</label>
-            <select x-model.number="form.trading.timeframe_minutes" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white font-mono">
-              <option value="1">1 minute (Parents: 5m, 15m)</option>
-              <option value="2">2 minutes (Parents: 10m, 30m)</option>
-              <option value="5">5 minutes (Parents: 15m, 1h — Recommended)</option>
-              <option value="15">15 minutes (Parents: 1h, 4h)</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Max Open Trades Per Symbol</label>
-            <select x-model.number="form.trading.max_open_trades_per_symbol" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white font-mono">
-              <option value="1">1 trade at a time</option>
-              <option value="2">2 trades</option>
-              <option value="3">3 trades</option>
-            </select>
-          </div>
+        <div>
+          <label class="block text-slate-400 text-xs mb-2 uppercase font-bold">Max Concurrent Open Trades Per Symbol</label>
+          <select x-model.number="form.trading.max_open_trades_per_symbol" class="w-full bg-[#0d2a37] border border-[#184657] rounded-lg p-3 text-sm text-white font-mono">
+            <option value="1">1 trade max per symbol</option>
+            <option value="2">2 concurrent trades (Recommended for 1m + 5m)</option>
+            <option value="3">3 concurrent trades</option>
+            <option value="4">4 concurrent trades (Allow all timeframes at once)</option>
+          </select>
+          <p class="text-[11px] text-slate-500 mt-1.5">
+            If set to 2, an open trade on 1m will not block a 5m setup from entering. Each trade is tracked and exited independently.
+          </p>
         </div>
       </div>
 
@@ -231,15 +237,13 @@
           trading: {
             symbols: ['BOOM1000', 'CRASH1000'],
             currency: 'USD',
-            multiplier: 100,
-            timeframe_minutes: 5,
             risk_type: 'percent',
-            risk_value: 5.0,
-            max_open_trades_per_symbol: 1
+            risk_value: 2.0,
+            max_open_trades_per_symbol: 2
           }
         },
         supportedSymbols: ['BOOM1000', 'CRASH1000'],
-        supportedMultipliers: [100, 200, 300, 400, 500],
+        supportedTimeframes: [1, 2, 5, 15],
         message: '',
         messageType: '',
         auth: {},
@@ -252,7 +256,6 @@
             const res = await fetch('/api/settings');
             const data = await res.json();
             this.form = data;
-            this.supportedMultipliers = data.supported_multipliers || [100, 200, 300, 400, 500];
           } catch (e) {}
           await this.refreshAuth();
         },
